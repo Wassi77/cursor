@@ -319,9 +319,10 @@ function startRealtimeSync() {
             .onSnapshot((snapshot) => {
                 const hasPendingWrites = snapshot.metadata.hasPendingWrites;
                 
+                const newNoteIds = new Set();
                 notes = snapshot.docs.map(doc => {
                     const data = doc.data();
-                    return {
+                    const note = {
                         id: doc.id,
                         title: data.title || '',
                         content: data.content || '',
@@ -332,7 +333,16 @@ function startRealtimeSync() {
                         isPinned: data.isPinned || false,
                         isArchived: data.isArchived || false
                     };
+
+                    newNoteIds.add(doc.id);
+                    return note;
                 });
+
+                for (const id of Array.from(expandedNoteIds)) {
+                    if (!newNoteIds.has(id)) {
+                        expandedNoteIds.delete(id);
+                    }
+                }
 
                 updateCategories();
                 updateCategoryFilter();
