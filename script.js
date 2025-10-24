@@ -9,6 +9,7 @@ const PASSWORD_HASH = window.firestoreAccessPassword || 'notes123';
 let currentNote = null;
 let notes = [];
 let categories = new Set();
+const expandedNotes = new Set();
 
 const elements = {
     loginScreen: document.getElementById('login-screen'),
@@ -318,9 +319,10 @@ function startRealtimeSync() {
             .onSnapshot((snapshot) => {
                 const hasPendingWrites = snapshot.metadata.hasPendingWrites;
                 
+                const newNoteIds = new Set();
                 notes = snapshot.docs.map(doc => {
                     const data = doc.data();
-                    return {
+                    const note = {
                         id: doc.id,
                         title: data.title || '',
                         content: data.content || '',
@@ -331,7 +333,16 @@ function startRealtimeSync() {
                         isPinned: data.isPinned || false,
                         isArchived: data.isArchived || false
                     };
+                    newNoteIds.add(doc.id);
+                    return note;
                 });
+
+                // Remove IDs from expandedNotes that are no longer present
+                for (const id of Array.from(expandedNotes)) {
+                    if (!newNoteIds.has(id)) {
+                        expandedNotes.delete(id);
+                    }
+                }
 
                 updateCategories();
                 updateCategoryFilter();
@@ -591,6 +602,15 @@ function exportAllNotes() {
     showToast('All notes exported! 💾');
 }
 
+function toggleNoteExpansion(noteId) {
+    if (expandedNotes.has(noteId)) {
+        expandedNotes.delete(noteId);
+    } else {
+        expandedNotes.add(noteId);
+    }
+    renderNotes();
+}
+
 function showArchivedNotes() {
     const archivedNotes = notes.filter(n => n.isArchived);
 
@@ -680,26 +700,50 @@ function renderNotes() {
     elements.notesContainer.innerHTML = '';
 
     filteredNotes.forEach(note => {
+        const isExpanded = expandedNotes.has(note.id);
+        const toggleLabel = isExpanded ? 'Collapse note' : 'Expand note';
+        const toggleText = isExpanded ? 'Hide details' : 'Show details';
+        const toggleIcon = isExpanded ? '▲' : '▼';
         const card = document.createElement('div');
-        card.className = 'note-card';
+        card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
 
-        card.innerHTML = `
-            <div class="note-header">
-                <h2 class="note-title">${note.isPinned ? '📌 ' : ''}${escapeHtml(note.title)}</h2>
-            </div>
+        const metaHtml = `
             <div class="note-meta">
                 <span>Created: ${note.createdAt.toLocaleDateString()}</span>
                 ${note.createdAt.getTime() !== note.updatedAt.getTime() ? `<span>• Modified: ${note.updatedAt.toLocaleDateString()}</span>` : ''}
             </div>
-            ${note.category ? `<div class="note-tags"><span class="note-tag">${escapeHtml(note.category)}</span></div>` : ''}
-            <div class="note-content">${escapeHtml(note.content)}</div>
-            <div class="note-actions">
-                <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
-                <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
-                <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
-                <button onclick="downloadNote('${note.id}')">💾 Download</button>
-                <button onclick="deleteNote('${note.id}')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🗑️ Delete</button>
+        `;
+
+        card.innerHTML = `
+            <div class="note-header">
+                <div class="note-summary">
+                    ${note.isPinned ? '<span class="note-pin" role="img" aria-label="Pinned note">📌</span>' : ''}
+                    <h2 class="note-title">${escapeHtml(note.title)}</h2>
+                </div>
+                <button type="button"
+                    class="note-toggle-btn"
+                    onclick="toggleNoteExpansion('${note.id}')"
+                    aria-expanded="${isExpanded}"
+                    aria-label="${toggleLabel}"
+                    title="${toggleLabel}">
+                    <span class="note-toggle-text">${toggleText}</span>
+                    <span class="note-toggle-icon" aria-hidden="true">${toggleIcon}</span>
+                </button>
             </div>
+            ${isExpanded ? `
+                <div class="note-details">
+                    ${metaHtml}
+                    ${note.category ? `<div class="note-tags"><span class="note-tag">${escapeHtml(note.category)}</span></div>` : ''}
+                    <div class="note-content">${escapeHtml(note.content)}</div>
+                    <div class="note-actions">
+                        <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
+                        <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
+                        <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
+                        <button onclick="downloadNote('${note.id}')">💾 Download</button>
+                        <button onclick="deleteNote('${note.id}')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🗑️ Delete</button>
+                    </div>
+                </div>
+            ` : ''}
         `;
 
         elements.notesContainer.appendChild(card);
@@ -747,5 +791,6 @@ window.deleteNote = deleteNote;
 window.togglePin = togglePin;
 window.toggleArchive = toggleArchive;
 window.downloadNote = downloadNote;
+window.toggleNoteExpansion = toggleNoteExpansion;
 
 init();
