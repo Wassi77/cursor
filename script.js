@@ -9,6 +9,7 @@ const PASSWORD_HASH = window.firestoreAccessPassword || 'notes123';
 let currentNote = null;
 let notes = [];
 let categories = new Set();
+const expandedNoteIds = new Set();
 
 const elements = {
     loginScreen: document.getElementById('login-screen'),
@@ -637,6 +638,13 @@ function renderNotes() {
     const categoryFilter = elements.categoryFilter.value;
     const sortBy = elements.sortSelect.value;
 
+    const activeNoteIds = new Set(notes.filter(n => !n.isArchived).map(n => n.id));
+    for (const id of Array.from(expandedNoteIds)) {
+        if (!activeNoteIds.has(id)) {
+            expandedNoteIds.delete(id);
+        }
+    }
+
     let filteredNotes = notes.filter(n => {
         if (n.isArchived) return false;
 
@@ -680,30 +688,128 @@ function renderNotes() {
     elements.notesContainer.innerHTML = '';
 
     filteredNotes.forEach(note => {
+        const isExpanded = expandedNoteIds.has(note.id);
         const card = document.createElement('div');
-        card.className = 'note-card';
+        const noteBodyId = `note-body-${note.id}`;
+        const rawTitle = note.title || 'Untitled note';
+        const safeTitle = escapeHtml(rawTitle);
+        const toggleLabel = escapeHtml(`Toggle details for ${rawTitle}`);
+        const toggleTitle = isExpanded ? 'Collapse note' : 'Expand note';
+        const titleWithPin = note.isPinned ? `📌 ${safeTitle}` : safeTitle;
+
+        const metaItems = [
+            `<span class="note-meta-item"><span class="note-meta-label">Created:</span> <span class="note-meta-value">${note.createdAt.toLocaleDateString()}</span></span>`
+        ];
+        if (note.createdAt.getTime() !== note.updatedAt.getTime()) {
+            metaItems.push(`<span class="note-meta-item"><span class="note-meta-label">Modified:</span> <span class="note-meta-value">${note.updatedAt.toLocaleDateString()}</span></span>`);
+        }
+        const metaHtml = `<div class="note-meta">${metaItems.join('')}</div>`;
+
+        const tagChips = [];
+        if (note.category) {
+            tagChips.push(`<span class="note-tag note-tag--category">${escapeHtml(note.category)}</span>`);
+        }
+        if (Array.isArray(note.tags)) {
+            note.tags.filter(Boolean).forEach(tag => {
+                tagChips.push(`<span class="note-tag">${escapeHtml(tag)}</span>`);
+            });
+        }
+        const tagsHtml = tagChips.length ? `<div class="note-tags">${tagChips.join('')}</div>` : '';
+
+        const noteContent = escapeHtml(note.content || '');
+
+        card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
+        card.dataset.noteId = note.id;
 
         card.innerHTML = `
             <div class="note-header">
-                <h2 class="note-title">${note.isPinned ? '📌 ' : ''}${escapeHtml(note.title)}</h2>
+                <button class="note-toggle" type="button" title="${toggleTitle}" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="${noteBodyId}" aria-label="${toggleLabel}">
+                    <span class="note-toggle-icon" aria-hidden="true"></span>
+                </button>
+                <h2 class="note-title">${titleWithPin}</h2>
             </div>
-            <div class="note-meta">
-                <span>Created: ${note.createdAt.toLocaleDateString()}</span>
-                ${note.createdAt.getTime() !== note.updatedAt.getTime() ? `<span>• Modified: ${note.updatedAt.toLocaleDateString()}</span>` : ''}
-            </div>
-            ${note.category ? `<div class="note-tags"><span class="note-tag">${escapeHtml(note.category)}</span></div>` : ''}
-            <div class="note-content">${escapeHtml(note.content)}</div>
-            <div class="note-actions">
-                <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
-                <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
-                <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
-                <button onclick="downloadNote('${note.id}')">💾 Download</button>
-                <button onclick="deleteNote('${note.id}')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🗑️ Delete</button>
+            <div id="${noteBodyId}" class="note-body">
+                ${metaHtml}
+                ${tagsHtml}
+                <div class="note-content">${noteContent}</div>
+                <div class="note-actions">
+                    <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
+                    <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
+                    <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
+                    <button onclick="downloadNote('${note.id}')">💾 Download</button>
+                    <button onclick="deleteNote('${note.id}')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🗑️ Delete</button>
+                </div>
             </div>
         `;
 
+        const noteBody = card.querySelector('.note-body');
+        const toggleBtn = card.querySelector('.note-toggle');
+
+        if (isExpanded && noteBody) {
+            requestAnimationFrame(() => {
+                noteBody.style.maxHeight = 'none';
+            });
+        }
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleCardExpansion(card, note.id);
+            });
+        }
+
         elements.notesContainer.appendChild(card);
     });
+}
+
+function toggleCardExpansion(card, noteId) {
+    const body = card.querySelector('.note-body');
+    const toggleBtn = card.querySelector('.note-toggle');
+    if (!body || !toggleBtn) return;
+
+    const shouldExpand = !card.classList.contains('expanded');
+
+    if (shouldExpand) {
+        expandedNoteIds.add(noteId);
+        card.classList.add('expanded');
+        card.classList.remove('collapsed');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.setAttribute('title', 'Collapse note');
+
+        const targetHeight = body.scrollHeight;
+        body.style.maxHeight = '0px';
+        requestAnimationFrame(() => {
+            body.style.maxHeight = `${targetHeight}px`;
+        });
+
+        const onExpandTransitionEnd = (event) => {
+            if (event.propertyName !== 'max-height') return;
+            body.style.maxHeight = 'none';
+            body.removeEventListener('transitionend', onExpandTransitionEnd);
+        };
+
+        body.addEventListener('transitionend', onExpandTransitionEnd);
+    } else {
+        expandedNoteIds.delete(noteId);
+        card.classList.remove('expanded');
+        card.classList.add('collapsed');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        toggleBtn.setAttribute('title', 'Expand note');
+
+        const currentHeight = body.scrollHeight;
+        body.style.maxHeight = `${currentHeight}px`;
+        requestAnimationFrame(() => {
+            body.style.maxHeight = '0px';
+        });
+
+        const onCollapseTransitionEnd = (event) => {
+            if (event.propertyName !== 'max-height') return;
+            body.style.maxHeight = '';
+            body.removeEventListener('transitionend', onCollapseTransitionEnd);
+        };
+
+        body.addEventListener('transitionend', onCollapseTransitionEnd);
+    }
 }
 
 function showToast(message, type = 'success') {
