@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Notes</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="login-screen" class="auth-container">
+        <div class="auth-box">
+            <h1>🔒 Personal Notes</h1>
+            <p class="auth-subtitle">Enter your password to access your notes</p>
+            <form id="login-form">
+                <input type="password" id="password-input" placeholder="Enter password" required autofocus>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form>
+            <p class="auth-hint">Default password: <code>notes123</code></p>
+        </div>
+    </div>
+
+    <div id="app" class="app-container" style="display: none;">
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">📝 Personal Notes</h1>
+                <div class="header-actions">
+                    <button id="theme-toggle" class="btn btn-icon" title="Toggle theme">
+                        <span class="icon">🌙</span>
+                    </button>
+                    <button id="logout-btn" class="btn btn-secondary">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main">
+            <div class="toolbar">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="🔍 Search notes..." class="search-input">
+                </div>
+                <div class="toolbar-actions">
+                    <select id="category-filter" class="filter-select">
+                        <option value="">All Categories</option>
+                    </select>
+                    <select id="sort-select" class="filter-select">
+                        <option value="modified">Sort: Modified Date</option>
+                        <option value="created">Sort: Created Date</option>
+                        <option value="title">Sort: Title</option>
+                    </select>
+                    <button id="show-archived-btn" class="btn btn-secondary" title="Show archived notes">
+                        📦 Archived
+                    </button>
+                    <button id="export-all-btn" class="btn btn-secondary" title="Export all notes">
+                        💾 Export All
+                    </button>
+                    <button id="new-note-btn" class="btn btn-primary">
+                        ➕ New Note
+                    </button>
+                </div>
+            </div>
+
+            <div id="notes-container" class="notes-container">
+                <div class="empty-state">
+                    <p class="empty-icon">📝</p>
+                    <h2>No notes yet</h2>
+                    <p>Create your first note to get started!</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="note-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">New Note</h2>
+                <button class="modal-close" id="close-modal">&times;</button>
+            </div>
+            <form id="note-form">
+                <div class="form-group">
+                    <input type="text" id="note-title" placeholder="Note title" required>
+                </div>
+                <div class="form-group">
+                    <textarea id="note-content" placeholder="Write your note here..." rows="10" required></textarea>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="note-category" placeholder="Category (optional)" list="categories-list">
+                    <datalist id="categories-list"></datalist>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-note-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="save-note-btn">Save Note</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="archived-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Archived Notes</h2>
+                <button class="modal-close" id="close-archived-modal">&times;</button>
+            </div>
+            <div id="archived-notes-container" class="archived-notes-list"></div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
