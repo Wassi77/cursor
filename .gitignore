@@ -21,3 +21,6 @@ coverage/
 # Environment
 .env
 .env.*
+
+# Firebase
+firebase-config.js

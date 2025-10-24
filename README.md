@@ -39,11 +39,21 @@ A password-protected personal note-taking web application designed for Netlify d
 
 ### ⚡ Technical Implementation
 - Pure HTML, CSS, JavaScript (no dependencies)
-- localStorage for data persistence
-- Fully client-side (no backend required)
+- **Cloud Database**: Firebase Firestore for cross-device sync
+- **Offline Support**: Works without internet, syncs when reconnected
+- **Real-time Sync**: Instant updates across all devices
+- **Migration**: Automatic migration from localStorage to cloud
 - Cross-browser compatible
 - Mobile-first responsive design
 - Optimized for Netlify static hosting
+
+### ☁️ Cloud Sync Features
+- **Cross-Device Access**: Access your notes from any device
+- **Real-time Synchronization**: Changes sync instantly across all devices
+- **Offline Mode**: Create and edit notes offline, auto-sync when back online
+- **Sync Status Indicator**: Visual feedback showing sync state (synced, syncing, offline, error)
+- **Automatic Migration**: Seamlessly migrate existing localStorage notes to cloud
+- **Conflict-Free**: Firestore handles concurrent edits automatically
 
 ## Quick Start
 
@@ -55,7 +65,15 @@ A password-protected personal note-taking web application designed for Netlify d
    cd <your-repo-name>
    ```
 
-2. Open `index.html` in your browser or use a local server:
+2. Copy the Firebase configuration template and add your project credentials:
+   ```bash
+   cp firebase-config.example.js firebase-config.js
+   ```
+   Update the new `firebase-config.js` with your Firebase settings. See [Firebase Setup](#firebase-setup) for step-by-step guidance.
+
+3. (Optional) Update the access password in `firebase-config.js` by setting `window.firestoreAccessPassword` to your desired password.
+
+4. Open `index.html` in your browser or use a local server:
    ```bash
    # Using Python 3
    python3 -m http.server 8000
@@ -64,19 +82,32 @@ A password-protected personal note-taking web application designed for Netlify d
    npx http-server
    ```
 
-3. Navigate to `http://localhost:8000` in your browser
+5. Navigate to `http://localhost:8000` in your browser
 
-4. Login with the default password: `notes123`
+6. Login with your configured password (default: `notes123`)
+
+### Firebase Setup
+
+**⚠️ Important:** To enable cloud synchronization, you must set up Firebase Firestore. Without it, the app will show an error.
+
+Follow the detailed setup guide in **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** for step-by-step instructions.
+
+**Quick summary:**
+1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com/)
+2. Enable Firestore Database and Anonymous Authentication
+3. Copy `firebase-config.example.js` to `firebase-config.js`
+4. Add your Firebase credentials to `firebase-config.js`
+5. (Optional) Set a custom password in the same file
 
 ### Changing the Password
 
-To change the default password, edit the `PASSWORD_HASH` constant in `script.js`:
+To change the default password, edit `firebase-config.js`:
 
 ```javascript
-const PASSWORD_HASH = 'your-new-password';
+window.firestoreAccessPassword = "your-secure-password";
 ```
 
-For better security, consider implementing a hash function, though note that client-side security has inherent limitations.
+**Note:** The password is checked on the frontend only. Anyone with access to the source code can see it, so don't use this for highly sensitive information.
 
 ## Deployment to Netlify
 
@@ -157,15 +188,16 @@ Click the theme button (🌙/☀️) in the header to switch between light and d
 
 ## Data Storage
 
-All data is stored locally in your browser's localStorage:
-- **Notes**: Stored as JSON with metadata (id, title, content, category, timestamps, pinned, archived)
-- **Authentication**: Session state stored locally
-- **Theme**: User preference saved
+Cloud synchronization is handled by **Firebase Firestore**:
+- **Notes**: Stored in Firestore with metadata (id, title, content, category, tags, timestamps, pinned, archived)
+- **Real-time Sync**: Changes propagate instantly across connected devices
+- **Offline Caching**: Firestore caches data locally and syncs when back online
 
-⚠️ **Important**: Data is stored per browser/device. To sync across devices:
-1. Export your notes as JSON backup
-2. Save the backup file to cloud storage (Dropbox, Google Drive, etc.)
-3. Import the backup on other devices (manually via localStorage or implement import feature)
+Local storage is still used for non-sensitive preferences:
+- **Authentication Session**: Tracks whether you're logged in on this device
+- **Theme Preference**: Stores your light/dark mode selection
+
+⚠️ **Important**: Ensure you have configured Firebase before using the app. Without it, notes cannot be saved.
 
 ## Browser Compatibility
 
@@ -177,24 +209,33 @@ Works on all modern browsers:
 
 ## Security Considerations
 
-This is a **client-side only** application with the following security characteristics:
+This application uses **Firebase Firestore** for cloud storage with the following security characteristics:
 
 ✅ **Pros**:
-- No server-side data storage or processing
-- Data stays on your device
-- No network requests after initial page load
+- Data stored in secure Google Cloud infrastructure
+- Transport encryption (HTTPS/TLS)
+- Firebase Anonymous Authentication for backend access control
+- Firestore Security Rules to control database access
+- Offline persistence with secure local caching
 
 ⚠️ **Limitations**:
-- Password is stored in plain text in the JavaScript file
-- Anyone with access to the source code can see the password
-- No encryption of localStorage data
-- Suitable for personal use, not for sensitive/confidential information
+- Password is checked on the frontend only (anyone with source code access can see it)
+- No encryption of data at rest beyond Firebase's default security
+- All users sharing the same password access the same note collection
+- Suitable for personal use, not for highly sensitive/confidential information
 
-For better security:
-- Deploy to a private URL
-- Use a strong, unique password
-- Change the default password
-- Consider implementing bcrypt or similar hashing (though it won't prevent client-side inspection)
+**For better security:**
+- Use a strong, unique password in `firebase-config.js`
+- Don't commit `firebase-config.js` to public repositories (it's in `.gitignore`)
+- Deploy to a private URL if possible
+- Regularly backup your notes using the Export feature
+- Monitor Firebase Console for unauthorized access attempts
+
+**Firebase Security:**
+- Anonymous authentication ensures only authenticated users can access Firestore
+- Security Rules prevent unauthorized access to the database
+- Firebase audit logs available in the console
+- Free tier has generous limits for personal use
 
 ## Customization
 
@@ -217,34 +258,72 @@ The codebase is well-structured and easy to extend:
 
 ```
 personal-notes/
-├── index.html          # Main HTML file
-├── styles.css          # All styling and themes
-├── script.js           # All JavaScript functionality
-├── netlify.toml        # Netlify configuration
-├── README.md           # This file
-├── LICENSE             # License file
-└── .gitignore          # Git ignore file
+├── index.html                # Main HTML file
+├── styles.css                # All styling and themes
+├── script.js                 # Application logic with Firestore integration
+├── firebase-config.example.js# Firebase configuration template
+├── FIREBASE_SETUP.md         # Detailed Firebase setup instructions
+├── .env.example              # Environment variable reference
+├── netlify.toml              # Netlify configuration
+├── README.md                 # This file
+├── LICENSE                   # License file
+└── .gitignore                # Git ignore file
 ```
+
+> **Note:** Create `firebase-config.js` (ignored by Git) with your Firebase credentials based on the provided example file.
 
 ## Troubleshooting
 
+### "Firebase configuration not found" Error
+- Ensure `firebase-config.js` exists in the project root
+- Verify it's properly configured with your Firebase project credentials
+- Check the browser console for specific error messages
+- See [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) for setup instructions
+
 ### Notes not saving
-- Check if localStorage is enabled in your browser
+- Check internet connection and sync status indicator
+- Verify Firebase project is set up correctly
 - Check browser console for errors (F12)
-- Ensure you're not in private/incognito mode
+- Ensure Firestore security rules are configured properly
+- Verify you're not exceeding Firebase free tier limits
+
+### Sync Status shows "Error" or "Offline"
+- Check your internet connection
+- Verify Firebase project credentials are correct
+- Check Firebase Console for service status
+- Review Firestore Security Rules
+- Try logging out and back in
+
+### Migration prompt not appearing
+- The app only prompts if localStorage contains notes AND you haven't migrated yet
+- Check if `localStorage.getItem('notes')` has data in browser console
+- The prompt only shows once; if skipped, it won't show again
+
+### Notes not syncing across devices
+- Ensure you're using the same password on both devices
+- Verify both devices have internet connectivity
+- Check sync status indicator on both devices
+- Wait a few seconds for real-time sync to propagate
 
 ### Password not working
-- Verify you're using the correct password set in `script.js`
-- Clear your browser cache and try again
+- Verify you're using the correct password from `firebase-config.js`
+- Default is `notes123` unless changed
+- Clear browser cache and try again
 
 ### Theme not persisting
-- Check if localStorage is enabled
+- Check if localStorage is enabled in your browser
 - Try toggling the theme again
 
-### Mobile issues
-- Clear browser cache
-- Ensure you're using a modern browser
-- Try in a different browser
+### Multiple tabs warning in console
+- This is normal - Firestore offline persistence can only be enabled in one tab
+- App will still work correctly in all tabs
+- Real-time sync will work across all open tabs
+
+### Firebase quota exceeded
+- Check your Firebase Console Usage tab
+- Free tier: 50K reads/day, 20K writes/day
+- Consider exporting notes and clearing old data
+- Upgrade to Firebase Blaze plan if needed (pay-as-you-go)
 
 ## License
 
@@ -268,7 +347,7 @@ Possible features to add:
 - Keyboard shortcuts
 - Note templates
 - Bulk operations (delete, archive multiple notes)
-- Cloud sync integration
+- End-to-end encryption for notes
 - Enhanced search with regex
 - Note versioning/history
 
