@@ -272,10 +272,65 @@ body {
     gap: 12px;
 }
 
+.note-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.note-pin {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
 .note-title {
     margin: 0;
     font-size: 20px;
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.note-toggle-btn {
+    padding: 8px 12px;
+    border-radius: 9px;
+    border: none;
+    cursor: pointer;
+    background: rgba(58, 134, 255, 0.1);
+    color: var(--primary-color);
+    font-weight: 600;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.note-toggle-btn:hover {
+    background: rgba(58, 134, 255, 0.18);
+}
+
+.note-toggle-text {
+    display: none;
+}
+
+.note-toggle-icon {
+    font-size: 12px;
+}
+
+@media (min-width: 640px) {
+    .note-toggle-text {
+        display: inline;
+    }
+}
+
+.note-details {
+    display: grid;
+    gap: 12px;
 }
 
 .note-meta {
