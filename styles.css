@@ -290,6 +290,15 @@ body {
     border-color: transparent;
 }
 
+.note-card.is-inline-editing {
+    border-color: rgba(58, 134, 255, 0.4);
+    box-shadow: 0 20px 45px rgba(58, 134, 255, 0.16);
+}
+
+.note-card.is-inline-editing .note-title {
+    color: var(--primary-color);
+}
+
 .note-card.expanded:hover {
     transform: translateY(-2px);
     box-shadow: 0 20px 50px rgba(58, 134, 255, 0.2);
@@ -302,12 +311,65 @@ body {
     gap: 12px;
 }
 
+.note-title-group {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 .note-title {
     margin: 0;
     font-size: 18px;
     font-weight: 700;
     flex: 1;
     line-height: 1.35;
+}
+
+.inline-title-input {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 18px;
+    font-weight: 700;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.note-card.is-inline-editing .inline-title-input {
+    opacity: 1;
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(58, 134, 255, 0.25);
+}
+
+.note-card.is-inline-editing .inline-title-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: rgba(58, 134, 255, 0.08);
+}
+
+.note-card.is-inline-editing .note-title {
+    opacity: 0;
+}
+
+.note-card:not(.is-inline-editing) .inline-title-input {
+    display: none;
+}
+
+.inline-title-input:disabled,
+.inline-category-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .note-toggle {
@@ -573,6 +635,100 @@ body {
     margin: 8px 0;
     display: block;
     box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.inline-note-editor {
+    min-height: 160px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    background: transparent;
+}
+
+.inline-note-editor[contenteditable="true"] {
+    background: rgba(58, 134, 255, 0.06);
+    border-color: rgba(58, 134, 255, 0.35);
+}
+
+.inline-note-editor[contenteditable="true"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.15);
+}
+
+.inline-note-editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted-text-color);
+    pointer-events: none;
+}
+
+.inline-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.inline-editor-toolbar .inline-editor-status {
+    min-height: 18px;
+}
+
+.inline-save-btn {
+    font-weight: 700;
+}
+
+.inline-save-btn:hover {
+    background: rgba(34, 197, 94, 0.18) !important;
+}
+
+.inline-field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.inline-field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted-text-color);
+    min-width: 65px;
+}
+
+.inline-category-input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.note-card.is-inline-editing .inline-category-input {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(58, 134, 255, 0.25);
+}
+
+.note-card.is-inline-editing .inline-category-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: rgba(58, 134, 255, 0.08);
+}
+
+.inline-category-field {
+    display: none;
+}
+
+.note-card.is-inline-editing .inline-category-field {
+    display: flex;
+}
+
+.note-card.is-inline-editing .note-tags {
+    display: none;
 }
 
 .form-actions {
