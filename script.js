@@ -1,6 +1,7 @@
 // Firebase and Database State
 let db = null;
 let auth = null;
+let storage = null;
 let unsubscribeListener = null;
 let offlineNotified = false;
 
@@ -10,6 +11,7 @@ let currentNote = null;
 let notes = [];
 let categories = new Set();
 const expandedNoteIds = new Set();
+let currentImages = []; // Track images for the current note being edited
 
 const elements = {
     loginScreen: document.getElementById('login-screen'),
@@ -42,7 +44,10 @@ const elements = {
     noteContent: document.getElementById('note-content'),
     noteCategory: document.getElementById('note-category'),
     categoriesList: document.getElementById('categories-list'),
-    toastContainer: document.getElementById('toast-container')
+    toastContainer: document.getElementById('toast-container'),
+    uploadImageBtn: document.getElementById('upload-image-btn'),
+    imageInput: document.getElementById('image-input'),
+    imagePreviewContainer: document.getElementById('image-preview-container')
 };
 
 const SYNC_STATUS_META = {
@@ -99,6 +104,17 @@ async function initializeFirebase() {
 
         const firestoreInstance = firebase.firestore();
         auth = firebase.auth();
+        storage = firebase.storage();
+
+        // Test Storage access
+        try {
+            const testRef = storage.ref();
+            console.log('Firebase Storage initialized successfully');
+            console.log('Storage bucket:', window.firebaseConfig.storageBucket);
+        } catch (storageError) {
+            console.error('Firebase Storage initialization error:', storageError);
+            showToast('Firebase Storage not available. Check your configuration.', 'error');
+        }
 
         // Enable offline persistence
         try {
@@ -143,6 +159,11 @@ function setupEventListeners() {
     elements.closeArchivedModal.addEventListener('click', closeArchivedModal);
     elements.migrateYesBtn.addEventListener('click', handleMigrationYes);
     elements.migrateSkipBtn.addEventListener('click', handleMigrationSkip);
+
+    // Image-related event listeners
+    elements.uploadImageBtn.addEventListener('click', () => elements.imageInput.click());
+    elements.imageInput.addEventListener('change', handleImageUpload);
+    elements.noteContent.addEventListener('paste', handlePaste);
 
     elements.noteModal.addEventListener('click', (e) => {
         if (e.target === elements.noteModal) {
@@ -280,6 +301,7 @@ async function handleMigrationYes() {
                 content: note?.content || '',
                 category: note?.category || '',
                 tags: Array.isArray(note?.tags) ? note.tags : [],
+                images: [], // Initialize with empty images array for migrated notes
                 createdAt: note?.created ? new Date(note.created) : firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: note?.modified ? new Date(note.modified) : firebase.firestore.FieldValue.serverTimestamp(),
                 isPinned: Boolean(note?.pinned),
@@ -328,6 +350,7 @@ function startRealtimeSync() {
                         content: data.content || '',
                         category: data.category || '',
                         tags: data.tags || [],
+                        images: data.images || [], // Add images field with default empty array
                         createdAt: getDateFromValue(data.createdAt),
                         updatedAt: getDateFromValue(data.updatedAt),
                         isPinned: data.isPinned || false,
@@ -406,10 +429,12 @@ function updateCategoryFilter() {
 
 function openNewNoteModal() {
     currentNote = null;
+    currentImages = []; // Reset images for new note
     elements.modalTitle.textContent = 'New Note';
     elements.noteTitle.value = '';
     elements.noteContent.value = '';
     elements.noteCategory.value = '';
+    elements.imagePreviewContainer.innerHTML = ''; // Clear image previews
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
@@ -419,10 +444,15 @@ function openEditNoteModal(noteId) {
     if (!note) return;
 
     currentNote = note;
+    currentImages = note.images || []; // Load existing images
     elements.modalTitle.textContent = 'Edit Note';
     elements.noteTitle.value = note.title;
     elements.noteContent.value = note.content;
     elements.noteCategory.value = note.category || '';
+    
+    // Display existing images
+    renderImagePreviews();
+    
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
@@ -430,6 +460,8 @@ function openEditNoteModal(noteId) {
 function closeNoteModal() {
     elements.noteModal.classList.remove('open');
     currentNote = null;
+    currentImages = []; // Clear current images
+    elements.imagePreviewContainer.innerHTML = ''; // Clear image previews
 }
 
 function closeArchivedModal() {
@@ -462,6 +494,7 @@ async function saveNote(e) {
                 title,
                 content,
                 category,
+                images: currentImages,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             showToast('Note updated successfully! ✅');
@@ -471,6 +504,7 @@ async function saveNote(e) {
                 title,
                 content,
                 category,
+                images: currentImages,
                 tags: [],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -615,6 +649,10 @@ function showArchivedNotes() {
     archivedNotes.forEach(note => {
         const card = document.createElement('div');
         card.className = 'archived-note-card';
+        
+        // Generate image HTML for archived notes
+        const imagesHtml = renderNoteImages(note.images);
+        
         card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                 <h3 style="margin: 0;">${escapeHtml(note.title)}</h3>
@@ -628,6 +666,7 @@ function showArchivedNotes() {
             <div style="color: var(--muted-text-color); margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                 ${escapeHtml(note.content.substring(0, 100))}...
             </div>
+            ${imagesHtml}
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button onclick="toggleArchive('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: rgba(58, 134, 255, 0.1); color: var(--primary-color); font-weight: 600;">
                     📤 Unarchive
@@ -727,6 +766,9 @@ function renderNotes() {
         const tagsHtml = tagChips.length ? `<div class="note-tags">${tagChips.join('')}</div>` : '';
 
         const noteContent = escapeHtml(note.content || '');
+        
+        // Generate image HTML for note cards
+        const imagesHtml = renderNoteImages(note.images);
 
         card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
         card.dataset.noteId = note.id;
@@ -742,6 +784,7 @@ function renderNotes() {
                 ${metaHtml}
                 ${tagsHtml}
                 <div class="note-content">${noteContent}</div>
+                ${imagesHtml}
                 <div class="note-actions">
                     <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
@@ -857,11 +900,324 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Image handling functions
+function handleImageUpload(e) {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+        if (validateImageFile(file)) {
+            uploadImage(file);
+        }
+    });
+    e.target.value = ''; // Reset input
+}
+
+function handlePaste(e) {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith('image/'));
+    
+    if (imageItems.length > 0) {
+        e.preventDefault();
+        imageItems.forEach(item => {
+            const file = item.getAsFile();
+            if (file && validateImageFile(file)) {
+                uploadImage(file);
+            }
+        });
+    }
+}
+
+function isReadyForUpload() {
+    if (!storage) {
+        showToast('Firebase Storage not initialized. Please refresh the page.', 'error');
+        return false;
+    }
+    
+    if (!auth || !auth.currentUser) {
+        showToast('Please wait for authentication to complete...', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+function validateImageFile(file) {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    if (!validTypes.includes(file.type)) {
+        showToast('Invalid file type. Please use PNG, JPG, GIF, or WebP.', 'error');
+        return false;
+    }
+
+    if (file.size > maxSize) {
+        showToast('File too large. Maximum size is 5MB.', 'error');
+        return false;
+    }
+
+    return true;
+}
+
+async function uploadImage(file) {
+    try {
+        // Check if ready for upload
+        if (!isReadyForUpload()) {
+            return;
+        }
+
+        showToast('Uploading image... 📤');
+        
+        // Create a unique filename
+        const timestamp = Date.now();
+        const randomId = Math.random().toString(36).substring(2, 8);
+        const filename = `images/${timestamp}_${randomId}_${file.name}`;
+        
+        console.log('Starting upload for:', filename, 'Size:', file.size, 'Type:', file.type);
+        
+        const storageRef = storage.ref();
+        const imageRef = storageRef.child(filename);
+        
+        // Add preview with loading state
+        const previewIndex = currentImages.length;
+        const tempImageData = {
+            url: '', // Will be updated after upload
+            filename: filename,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+            isUploading: true
+        };
+        
+        currentImages.push(tempImageData);
+        renderImagePreviews();
+        
+        // Upload file with metadata
+        const metadata = {
+            contentType: file.type,
+            customMetadata: {
+                uploadedBy: 'anonymous',
+                originalName: file.name
+            }
+        };
+        
+        const uploadTask = imageRef.put(file, metadata);
+        
+        uploadTask.on('state_changed', 
+            (snapshot) => {
+                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                console.log('Upload progress:', progress + '%');
+                if (progress < 100) {
+                    // Update preview with progress
+                    updateImageProgress(previewIndex, progress);
+                }
+            },
+            (error) => {
+                console.error('Upload error:', error);
+                let errorMessage = 'Failed to upload image';
+                
+                // Provide more specific error messages
+                if (error.code === 'storage/unauthorized') {
+                    errorMessage = 'Not authorized to upload. Check Firebase Storage rules.';
+                } else if (error.code === 'storage/canceled') {
+                    errorMessage = 'Upload was cancelled';
+                } else if (error.code === 'storage/retry-limit-exceeded') {
+                    errorMessage = 'Upload retry limit exceeded. Please try again.';
+                } else if (error.code === 'storage/quota-exceeded') {
+                    errorMessage = 'Storage quota exceeded. Please free up space.';
+                } else if (error.message) {
+                    errorMessage = 'Upload failed: ' + error.message;
+                }
+                
+                showToast(errorMessage, 'error');
+                // Remove failed upload
+                currentImages.splice(previewIndex, 1);
+                renderImagePreviews();
+            },
+            async () => {
+                try {
+                    console.log('Upload completed, getting download URL...');
+                    // Get download URL
+                    const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                    console.log('Download URL obtained:', downloadURL);
+                    
+                    // Update the image data with the actual URL
+                    currentImages[previewIndex] = {
+                        url: downloadURL,
+                        filename: filename,
+                        size: file.size,
+                        uploadedAt: new Date().toISOString(),
+                        isUploading: false
+                    };
+                    
+                    renderImagePreviews();
+                    showToast('Image uploaded successfully! ✅');
+                } catch (error) {
+                    console.error('Error getting download URL:', error);
+                    showToast('Failed to get image URL: ' + error.message, 'error');
+                    currentImages.splice(previewIndex, 1);
+                    renderImagePreviews();
+                }
+            }
+        );
+        
+    } catch (error) {
+        console.error('Upload image error:', error);
+        showToast('Failed to upload image: ' + error.message, 'error');
+    }
+}
+
+function updateImageProgress(index, progress) {
+    const previews = document.querySelectorAll('.image-preview');
+    if (previews[index]) {
+        const preview = previews[index];
+        preview.classList.add('uploading');
+        const sizeElement = preview.querySelector('.image-size');
+        if (sizeElement) {
+            sizeElement.textContent = `${progress}%`;
+        }
+    }
+}
+
+function renderImagePreviews() {
+    elements.imagePreviewContainer.innerHTML = '';
+    
+    if (currentImages.length === 0) {
+        return;
+    }
+    
+    const container = document.createElement('div');
+    container.className = 'image-previews';
+    
+    currentImages.forEach((image, index) => {
+        const preview = document.createElement('div');
+        preview.className = `image-preview ${image.isUploading ? 'uploading' : ''}`;
+        
+        if (image.isUploading) {
+            // Show loading placeholder
+            preview.innerHTML = `
+                <div style="width: 100%; height: 150px; background: var(--border-color); display: flex; align-items: center; justify-content: center; color: var(--muted-text-color);">
+                    <div>
+                        <div style="font-size: 24px; margin-bottom: 8px;">📤</div>
+                        <div style="font-size: 14px;">Uploading...</div>
+                    </div>
+                </div>
+                <div class="image-info">
+                    <span class="image-size">0%</span>
+                </div>
+            `;
+        } else {
+            // Show actual image
+            preview.innerHTML = `
+                <img src="${image.url}" alt="Uploaded image" loading="lazy">
+                <button type="button" class="image-remove-btn" onclick="removeImage(${index})" title="Remove image">
+                    ×
+                </button>
+                <div class="image-info">
+                    <span class="image-size">${formatFileSize(image.size)}</span>
+                </div>
+            `;
+        }
+        
+        container.appendChild(preview);
+    });
+    
+    elements.imagePreviewContainer.appendChild(container);
+}
+
+function removeImage(index) {
+    const image = currentImages[index];
+    
+    // Remove from Firebase Storage (optional - can keep for cleanup)
+    if (storage && image.filename) {
+        try {
+            const imageRef = storage.ref().child(image.filename);
+            imageRef.delete().catch(error => {
+                console.warn('Failed to delete image from storage:', error);
+            });
+        } catch (error) {
+            console.warn('Failed to delete image from storage:', error);
+        }
+    }
+    
+    // Remove from current images array
+    currentImages.splice(index, 1);
+    renderImagePreviews();
+    showToast('Image removed');
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function renderNoteImages(images) {
+    if (!images || images.length === 0) {
+        return '';
+    }
+    
+    const maxThumbnails = 3; // Show max 3 thumbnails in note card
+    const showMoreCount = images.length - maxThumbnails;
+    
+    let html = '<div class="note-images">';
+    
+    images.slice(0, maxThumbnails).forEach((image, index) => {
+        html += `
+            <img src="${image.url}" 
+                 alt="Note image" 
+                 class="note-image-thumbnail" 
+                 loading="lazy"
+                 onclick="window.open('${image.url}', '_blank')"
+                 title="Click to view full size">
+        `;
+    });
+    
+    if (showMoreCount > 0) {
+        html += `
+            <div class="note-images-more" title="${showMoreCount} more images">
+                +${showMoreCount}
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    return html;
+}
+
 // Make functions available globally for inline event handlers
 window.openEditNoteModal = openEditNoteModal;
 window.deleteNote = deleteNote;
 window.togglePin = togglePin;
 window.toggleArchive = toggleArchive;
 window.downloadNote = downloadNote;
+window.removeImage = removeImage;
+
+// Debug function for troubleshooting
+window.debugImageUpload = function() {
+    console.log('=== Image Upload Debug Info ===');
+    console.log('Firebase initialized:', !!firebase.apps.length);
+    console.log('Storage available:', !!storage);
+    console.log('Auth available:', !!auth);
+    console.log('User authenticated:', !!auth?.currentUser);
+    console.log('Firebase config:', window.firebaseConfig);
+    console.log('Current images:', currentImages);
+    
+    if (storage) {
+        try {
+            const testRef = storage.ref();
+            console.log('Storage ref created successfully:', !!testRef);
+        } catch (error) {
+            console.error('Storage ref creation failed:', error);
+        }
+    }
+    
+    return {
+        firebase: !!firebase.apps.length,
+        storage: !!storage,
+        auth: !!auth,
+        user: !!auth?.currentUser,
+        config: !!window.firebaseConfig
+    };
+};
 
 init();
