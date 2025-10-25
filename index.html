@@ -90,6 +90,7 @@
                         <input type="file" id="image-upload-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" multiple hidden>
                         <span class="note-editor-hint">Tip: Paste images with Ctrl+V or Cmd+V</span>
                         <span id="note-editor-status" class="note-editor-status" aria-live="polite"></span>
+                        <span id="auto-save-status" class="auto-save-status" aria-live="polite"></span>
                     </div>
                     <div id="note-content-editor" class="note-editor" contenteditable="true" data-placeholder="Write your note here..."></div>
                 </div>
@@ -98,8 +99,7 @@
                     <datalist id="categories-list"></datalist>
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-note-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="save-note-btn">Save Note</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-note-btn">Close</button>
                 </div>
             </form>
         </div>
