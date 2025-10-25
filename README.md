@@ -109,7 +109,10 @@ Follow the detailed setup guide in **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** 
 2. Enable Firestore Database and Anonymous Authentication
 3. Copy `firebase-config.example.js` to `firebase-config.js`
 4. Add your Firebase credentials to `firebase-config.js`
-5. (Optional) Set a custom password in the same file
+5. (Optional) Set a custom password in same file
+
+**Debugging Image Upload Issues:**
+If image uploads are stuck at 0%, open browser console and run `debugImageUpload()` to see detailed diagnostic information.
 
 ### Changing the Password
 

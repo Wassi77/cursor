@@ -1,6 +1,7 @@
 // Firebase and Database State
 let db = null;
 let auth = null;
+let storage = null;
 let unsubscribeListener = null;
 let offlineNotified = false;
 
@@ -103,6 +104,17 @@ async function initializeFirebase() {
 
         const firestoreInstance = firebase.firestore();
         auth = firebase.auth();
+        storage = firebase.storage();
+
+        // Test Storage access
+        try {
+            const testRef = storage.ref();
+            console.log('Firebase Storage initialized successfully');
+            console.log('Storage bucket:', window.firebaseConfig.storageBucket);
+        } catch (storageError) {
+            console.error('Firebase Storage initialization error:', storageError);
+            showToast('Firebase Storage not available. Check your configuration.', 'error');
+        }
 
         // Enable offline persistence
         try {
@@ -914,6 +926,20 @@ function handlePaste(e) {
     }
 }
 
+function isReadyForUpload() {
+    if (!storage) {
+        showToast('Firebase Storage not initialized. Please refresh the page.', 'error');
+        return false;
+    }
+    
+    if (!auth || !auth.currentUser) {
+        showToast('Please wait for authentication to complete...', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
 function validateImageFile(file) {
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     const maxSize = 5 * 1024 * 1024; // 5MB
@@ -933,6 +959,11 @@ function validateImageFile(file) {
 
 async function uploadImage(file) {
     try {
+        // Check if ready for upload
+        if (!isReadyForUpload()) {
+            return;
+        }
+
         showToast('Uploading image... 📤');
         
         // Create a unique filename
@@ -940,15 +971,9 @@ async function uploadImage(file) {
         const randomId = Math.random().toString(36).substring(2, 8);
         const filename = `images/${timestamp}_${randomId}_${file.name}`;
         
-        // Initialize Firebase Storage if not already done
-        if (!window.firebaseStorage) {
-            if (!firebase.apps.length) {
-                firebase.initializeApp(window.firebaseConfig);
-            }
-            window.firebaseStorage = firebase.storage();
-        }
+        console.log('Starting upload for:', filename, 'Size:', file.size, 'Type:', file.type);
         
-        const storageRef = window.firebaseStorage.ref();
+        const storageRef = storage.ref();
         const imageRef = storageRef.child(filename);
         
         // Add preview with loading state
@@ -964,12 +989,21 @@ async function uploadImage(file) {
         currentImages.push(tempImageData);
         renderImagePreviews();
         
-        // Upload file
-        const uploadTask = imageRef.put(file);
+        // Upload file with metadata
+        const metadata = {
+            contentType: file.type,
+            customMetadata: {
+                uploadedBy: 'anonymous',
+                originalName: file.name
+            }
+        };
+        
+        const uploadTask = imageRef.put(file, metadata);
         
         uploadTask.on('state_changed', 
             (snapshot) => {
                 const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                console.log('Upload progress:', progress + '%');
                 if (progress < 100) {
                     // Update preview with progress
                     updateImageProgress(previewIndex, progress);
@@ -977,15 +1011,32 @@ async function uploadImage(file) {
             },
             (error) => {
                 console.error('Upload error:', error);
-                showToast('Failed to upload image: ' + error.message, 'error');
+                let errorMessage = 'Failed to upload image';
+                
+                // Provide more specific error messages
+                if (error.code === 'storage/unauthorized') {
+                    errorMessage = 'Not authorized to upload. Check Firebase Storage rules.';
+                } else if (error.code === 'storage/canceled') {
+                    errorMessage = 'Upload was cancelled';
+                } else if (error.code === 'storage/retry-limit-exceeded') {
+                    errorMessage = 'Upload retry limit exceeded. Please try again.';
+                } else if (error.code === 'storage/quota-exceeded') {
+                    errorMessage = 'Storage quota exceeded. Please free up space.';
+                } else if (error.message) {
+                    errorMessage = 'Upload failed: ' + error.message;
+                }
+                
+                showToast(errorMessage, 'error');
                 // Remove failed upload
                 currentImages.splice(previewIndex, 1);
                 renderImagePreviews();
             },
             async () => {
                 try {
+                    console.log('Upload completed, getting download URL...');
                     // Get download URL
                     const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                    console.log('Download URL obtained:', downloadURL);
                     
                     // Update the image data with the actual URL
                     currentImages[previewIndex] = {
@@ -1075,10 +1126,9 @@ function removeImage(index) {
     const image = currentImages[index];
     
     // Remove from Firebase Storage (optional - can keep for cleanup)
-    if (window.firebaseStorage && image.filename) {
+    if (storage && image.filename) {
         try {
-            const storageRef = window.firebaseStorage.ref();
-            const imageRef = storageRef.child(image.filename);
+            const imageRef = storage.ref().child(image.filename);
             imageRef.delete().catch(error => {
                 console.warn('Failed to delete image from storage:', error);
             });
@@ -1141,5 +1191,33 @@ window.togglePin = togglePin;
 window.toggleArchive = toggleArchive;
 window.downloadNote = downloadNote;
 window.removeImage = removeImage;
+
+// Debug function for troubleshooting
+window.debugImageUpload = function() {
+    console.log('=== Image Upload Debug Info ===');
+    console.log('Firebase initialized:', !!firebase.apps.length);
+    console.log('Storage available:', !!storage);
+    console.log('Auth available:', !!auth);
+    console.log('User authenticated:', !!auth?.currentUser);
+    console.log('Firebase config:', window.firebaseConfig);
+    console.log('Current images:', currentImages);
+    
+    if (storage) {
+        try {
+            const testRef = storage.ref();
+            console.log('Storage ref created successfully:', !!testRef);
+        } catch (error) {
+            console.error('Storage ref creation failed:', error);
+        }
+    }
+    
+    return {
+        firebase: !!firebase.apps.length,
+        storage: !!storage,
+        auth: !!auth,
+        user: !!auth?.currentUser,
+        config: !!window.firebaseConfig
+    };
+};
 
 init();
