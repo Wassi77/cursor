@@ -11,6 +11,18 @@ let notes = [];
 let categories = new Set();
 const expandedNoteIds = new Set();
 
+const SUPPORTED_IMAGE_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/gif',
+    'image/webp'
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
+const MAX_IMAGE_SIZE_MB = 5;
+const MAX_IMAGE_SIZE = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+let editorStatusTimeoutId = null;
+
 const elements = {
     loginScreen: document.getElementById('login-screen'),
     loginForm: document.getElementById('login-form'),
@@ -39,10 +51,13 @@ const elements = {
     syncStatus: document.getElementById('sync-status'),
     modalTitle: document.getElementById('modal-title'),
     noteTitle: document.getElementById('note-title'),
-    noteContent: document.getElementById('note-content'),
+    noteContentEditor: document.getElementById('note-content-editor'),
     noteCategory: document.getElementById('note-category'),
     categoriesList: document.getElementById('categories-list'),
-    toastContainer: document.getElementById('toast-container')
+    toastContainer: document.getElementById('toast-container'),
+    uploadImageBtn: document.getElementById('upload-image-btn'),
+    imageUploadInput: document.getElementById('image-upload-input'),
+    noteEditorStatus: document.getElementById('note-editor-status')
 };
 
 const SYNC_STATUS_META = {
@@ -143,6 +158,18 @@ function setupEventListeners() {
     elements.closeArchivedModal.addEventListener('click', closeArchivedModal);
     elements.migrateYesBtn.addEventListener('click', handleMigrationYes);
     elements.migrateSkipBtn.addEventListener('click', handleMigrationSkip);
+
+    if (elements.uploadImageBtn && elements.imageUploadInput) {
+        elements.uploadImageBtn.addEventListener('click', () => {
+            elements.imageUploadInput.click();
+        });
+
+        elements.imageUploadInput.addEventListener('change', handleImageUpload);
+    }
+
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.addEventListener('paste', handleEditorPaste);
+    }
 
     elements.noteModal.addEventListener('click', (e) => {
         if (e.target === elements.noteModal) {
@@ -322,10 +349,12 @@ function startRealtimeSync() {
                 const newNoteIds = new Set();
                 notes = snapshot.docs.map(doc => {
                     const data = doc.data();
+                    const normalizedContent = normalizeNoteContent(data.content || '');
                     const note = {
                         id: doc.id,
                         title: data.title || '',
-                        content: data.content || '',
+                        content: normalizedContent,
+                        plainContent: extractPlainTextFromHtml(normalizedContent),
                         category: data.category || '',
                         tags: data.tags || [],
                         createdAt: getDateFromValue(data.createdAt),
@@ -408,8 +437,11 @@ function openNewNoteModal() {
     currentNote = null;
     elements.modalTitle.textContent = 'New Note';
     elements.noteTitle.value = '';
-    elements.noteContent.value = '';
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.innerHTML = '';
+    }
     elements.noteCategory.value = '';
+    clearEditorStatus();
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
@@ -421,8 +453,12 @@ function openEditNoteModal(noteId) {
     currentNote = note;
     elements.modalTitle.textContent = 'Edit Note';
     elements.noteTitle.value = note.title;
-    elements.noteContent.value = note.content;
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.innerHTML = note.content || '';
+        focusEditorAtEnd(elements.noteContentEditor);
+    }
     elements.noteCategory.value = note.category || '';
+    clearEditorStatus();
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
@@ -430,6 +466,7 @@ function openEditNoteModal(noteId) {
 function closeNoteModal() {
     elements.noteModal.classList.remove('open');
     currentNote = null;
+    clearEditorStatus();
 }
 
 function closeArchivedModal() {
@@ -445,12 +482,27 @@ async function saveNote(e) {
     }
 
     const title = elements.noteTitle.value.trim();
-    const content = elements.noteContent.value.trim();
     const category = elements.noteCategory.value.trim();
+    const editorHtml = elements.noteContentEditor ? elements.noteContentEditor.innerHTML : '';
+    const sanitizedContent = sanitizeNoteContent(editorHtml);
+    const contentHasValue = hasMeaningfulContent(sanitizedContent);
 
-    if (!title || !content) {
-        showToast('Please fill in all required fields', 'error');
+    if (!title) {
+        showToast('Please provide a note title', 'error');
+        elements.noteTitle.focus();
         return;
+    }
+
+    if (!contentHasValue) {
+        showToast('Add text or images to your note before saving', 'error');
+        if (elements.noteContentEditor) {
+            elements.noteContentEditor.focus();
+        }
+        return;
+    }
+
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.innerHTML = sanitizedContent;
     }
 
     try {
@@ -460,7 +512,7 @@ async function saveNote(e) {
             // Update existing note
             await db.collection('notes').doc(currentNote.id).update({
                 title,
-                content,
+                content: sanitizedContent,
                 category,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
@@ -469,7 +521,7 @@ async function saveNote(e) {
             // Create new note
             await db.collection('notes').add({
                 title,
-                content,
+                content: sanitizedContent,
                 category,
                 tags: [],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -558,7 +610,8 @@ function downloadNote(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
-    const content = `${note.title}\n${'='.repeat(note.title.length)}\n\nCategory: ${note.category || 'None'}\nCreated: ${note.createdAt.toLocaleString()}\nModified: ${note.updatedAt.toLocaleString()}\n\n${note.content}`;
+    const noteBodyText = note.plainContent || extractPlainTextFromHtml(note.content);
+    const content = `${note.title}\n${'='.repeat(note.title.length)}\n\nCategory: ${note.category || 'None'}\nCreated: ${note.createdAt.toLocaleString()}\nModified: ${note.updatedAt.toLocaleString()}\n\n${noteBodyText}`;
 
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -626,7 +679,7 @@ function showArchivedNotes() {
                 ${note.category ? `<span class="note-tag">${escapeHtml(note.category)}</span>` : ''}
             </div>
             <div style="color: var(--muted-text-color); margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                ${escapeHtml(note.content.substring(0, 100))}...
+                ${escapeHtml((note.plainContent || extractPlainTextFromHtml(note.content)).substring(0, 100))}...
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button onclick="toggleArchive('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: rgba(58, 134, 255, 0.1); color: var(--primary-color); font-weight: 600;">
@@ -660,7 +713,7 @@ function renderNotes() {
 
         const matchesSearch = !searchQuery ||
             n.title.toLowerCase().includes(searchQuery) ||
-            n.content.toLowerCase().includes(searchQuery) ||
+            (n.plainContent || '').toLowerCase().includes(searchQuery) ||
             (n.category && n.category.toLowerCase().includes(searchQuery));
 
         const matchesCategory = !categoryFilter || n.category === categoryFilter;
@@ -726,7 +779,7 @@ function renderNotes() {
         }
         const tagsHtml = tagChips.length ? `<div class="note-tags">${tagChips.join('')}</div>` : '';
 
-        const noteContent = escapeHtml(note.content || '');
+        const noteContent = note.content || '';
 
         card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
         card.dataset.noteId = note.id;
@@ -741,7 +794,7 @@ function renderNotes() {
             <div id="${noteBodyId}" class="note-body">
                 ${metaHtml}
                 ${tagsHtml}
-                <div class="note-content">${noteContent}</div>
+                <div class="note-content"></div>
                 <div class="note-actions">
                     <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
@@ -751,6 +804,11 @@ function renderNotes() {
                 </div>
             </div>
         `;
+
+        const contentDiv = card.querySelector('.note-content');
+        if (contentDiv) {
+            contentDiv.innerHTML = noteContent;
+        }
 
         const noteBody = card.querySelector('.note-body');
         const toggleBtn = card.querySelector('.note-toggle');
@@ -855,6 +913,362 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+async function handleImageUpload(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+        return;
+    }
+
+    for (const file of files) {
+        if (!validateImageFile(file)) {
+            continue;
+        }
+        await processImage(file);
+    }
+
+    event.target.value = '';
+}
+
+function handleEditorPaste(event) {
+    if (!elements.noteContentEditor) return;
+
+    const clipboardData = event.clipboardData;
+    if (!clipboardData) return;
+
+    const items = clipboardData.items ? Array.from(clipboardData.items) : [];
+    const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+
+    if (imageItem) {
+        event.preventDefault();
+        const file = imageItem.getAsFile();
+        if (file && validateImageFile(file)) {
+            processImage(file);
+        }
+        return;
+    }
+
+    const text = clipboardData.getData('text/plain');
+    if (typeof text === 'string' && text.length > 0) {
+        event.preventDefault();
+        insertTextAtCursor(text);
+    }
+}
+
+function validateImageFile(file) {
+    const fileType = (file.type || '').toLowerCase();
+    const extension = ((file.name || '').split('.').pop() || '').toLowerCase();
+
+    const isTypeValid = fileType && SUPPORTED_IMAGE_TYPES.has(fileType);
+    const isExtensionValid = SUPPORTED_IMAGE_EXTENSIONS.has(extension);
+
+    if (!isTypeValid && !isExtensionValid) {
+        const readable = extension ? extension.toUpperCase() : 'UNKNOWN';
+        showEditorStatus(`Unsupported format (${readable}). Use PNG, JPEG, GIF, or WebP.`, 'error', 5000);
+        showToast('Unsupported image format', 'error');
+        return false;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+        showEditorStatus(`Image too large (${formatFileSize(file.size)}). Max ${MAX_IMAGE_SIZE_MB}MB.`, 'error', 5000);
+        showToast(`Image too large (max ${MAX_IMAGE_SIZE_MB}MB)`, 'error');
+        return false;
+    }
+
+    return true;
+}
+
+async function processImage(file) {
+    try {
+        setEditorProcessing(true);
+        showEditorStatus('Adding image...', 'info');
+
+        const dataUrl = await readFileAsDataURL(file);
+        insertImageIntoEditor(dataUrl, file.name);
+
+        showToast('Image added to note 🖼️');
+        showEditorStatus(`Image added (${formatFileSize(file.size)})`, 'success', 3200);
+    } catch (error) {
+        console.error('Image processing error:', error);
+        showEditorStatus('Failed to add image', 'error', 4000);
+        showToast('Failed to add image', 'error');
+    } finally {
+        setEditorProcessing(false);
+    }
+}
+
+function setEditorProcessing(isProcessing) {
+    if (!elements.uploadImageBtn) return;
+
+    if (isProcessing) {
+        elements.uploadImageBtn.classList.add('is-loading');
+        elements.uploadImageBtn.setAttribute('aria-busy', 'true');
+        elements.uploadImageBtn.disabled = true;
+    } else {
+        elements.uploadImageBtn.classList.remove('is-loading');
+        elements.uploadImageBtn.removeAttribute('aria-busy');
+        elements.uploadImageBtn.disabled = false;
+    }
+}
+
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+            } else {
+                reject(new Error('Invalid file result'));
+            }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function insertImageIntoEditor(dataUrl, fileName = '') {
+    if (!elements.noteContentEditor) return;
+
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    const trimmedName = (fileName || '').trim();
+    if (trimmedName) {
+        const altText = trimmedName.replace(/\.[^/.]+$/, '');
+        img.alt = altText || 'Note image';
+        img.title = trimmedName;
+    } else {
+        img.alt = 'Note image';
+    }
+    img.loading = 'lazy';
+
+    const selection = window.getSelection();
+    let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    if (!range || !elements.noteContentEditor.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(elements.noteContentEditor);
+        range.collapse(false);
+    }
+
+    range.deleteContents();
+    range.insertNode(img);
+
+    const spacer = document.createElement('br');
+    img.insertAdjacentElement('afterend', spacer);
+
+    range.setStartAfter(spacer);
+    range.collapse(true);
+
+    if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    elements.noteContentEditor.focus();
+}
+
+function insertTextAtCursor(text) {
+    if (!elements.noteContentEditor) return;
+
+    const normalizedText = text.replace(/\r\n/g, '\n');
+    const lines = normalizedText.split('\n');
+
+    const selection = window.getSelection();
+    let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    if (!range || !elements.noteContentEditor.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(elements.noteContentEditor);
+        range.collapse(false);
+    }
+
+    range.deleteContents();
+
+    lines.forEach((line, index) => {
+        if (line.length) {
+            const textNode = document.createTextNode(line);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+        }
+        if (index < lines.length - 1) {
+            const br = document.createElement('br');
+            range.insertNode(br);
+            range.setStartAfter(br);
+        }
+    });
+
+    range.collapse(true);
+
+    if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    elements.noteContentEditor.focus();
+}
+
+function showEditorStatus(message, type = 'info', duration = 0) {
+    if (!elements.noteEditorStatus) return;
+
+    clearEditorStatus();
+
+    elements.noteEditorStatus.textContent = message;
+    elements.noteEditorStatus.classList.add(`note-editor-status--${type}`);
+
+    if (duration > 0) {
+        editorStatusTimeoutId = setTimeout(() => {
+            clearEditorStatus();
+        }, duration);
+    }
+}
+
+function clearEditorStatus() {
+    if (!elements.noteEditorStatus) return;
+
+    if (editorStatusTimeoutId) {
+        clearTimeout(editorStatusTimeoutId);
+        editorStatusTimeoutId = null;
+    }
+    elements.noteEditorStatus.textContent = '';
+    elements.noteEditorStatus.className = 'note-editor-status';
+}
+
+function sanitizeNoteContent(html) {
+    if (!html) return '';
+
+    const template = document.createElement('template');
+    template.innerHTML = html;
+
+    template.content.querySelectorAll('script, style, iframe, object, embed').forEach((node) => node.remove());
+
+    const allowedTags = new Set([
+        'img',
+        'br',
+        'div',
+        'p',
+        'strong',
+        'b',
+        'em',
+        'i',
+        'u',
+        's',
+        'ul',
+        'ol',
+        'li',
+        'code',
+        'pre',
+        'span'
+    ]);
+    const allowedAttributes = {
+        img: ['src', 'alt', 'title']
+    };
+
+    const elementsToSanitize = Array.from(template.content.querySelectorAll('*'));
+    elementsToSanitize.forEach((node) => {
+        const tagName = node.tagName.toLowerCase();
+        if (!allowedTags.has(tagName)) {
+            const fragment = document.createDocumentFragment();
+            while (node.firstChild) {
+                fragment.appendChild(node.firstChild);
+            }
+            node.replaceWith(fragment);
+            return;
+        }
+
+        Array.from(node.attributes).forEach((attr) => {
+            const attrName = attr.name.toLowerCase();
+            const allowedForTag = allowedAttributes[tagName] || [];
+            if (!allowedForTag.includes(attrName)) {
+                node.removeAttribute(attr.name);
+                return;
+            }
+
+            if (tagName === 'img' && attrName === 'src' && !attr.value.startsWith('data:image/')) {
+                node.remove();
+            }
+
+            if (tagName === 'img' && (attrName === 'alt' || attrName === 'title')) {
+                node.setAttribute(attr.name, attr.value.slice(0, 120));
+            }
+        });
+    });
+
+    const commentWalker = document.createTreeWalker(template.content, NodeFilter.SHOW_COMMENT, null);
+    const commentsToRemove = [];
+    let currentComment = commentWalker.nextNode();
+    while (currentComment) {
+        commentsToRemove.push(currentComment);
+        currentComment = commentWalker.nextNode();
+    }
+    commentsToRemove.forEach((comment) => comment.remove());
+
+    return template.innerHTML.trim();
+}
+
+function convertPlainTextToHtml(text) {
+    return escapeHtml(text).replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+}
+
+function normalizeNoteContent(content) {
+    if (!content) return '';
+
+    const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content);
+    const html = looksLikeHtml ? content : convertPlainTextToHtml(content);
+    return sanitizeNoteContent(html);
+}
+
+function extractPlainTextFromHtml(html) {
+    if (!html) return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    return (tempDiv.textContent || tempDiv.innerText || '').trim();
+}
+
+function hasMeaningfulContent(html) {
+    if (!html) return false;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    const hasText = (tempDiv.textContent || '').trim().length > 0;
+    const hasImages = tempDiv.querySelectorAll('img').length > 0;
+
+    return hasText || hasImages;
+}
+
+function formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (bytes >= 1024) {
+        return `${Math.round(bytes / 1024)} KB`;
+    }
+    return `${bytes} B`;
+}
+
+function focusEditorAtEnd(element) {
+    element.focus();
+
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    const range = document.createRange();
+    if (element.childNodes.length > 0) {
+        const lastNode = element.childNodes[element.childNodes.length - 1];
+        if (lastNode.nodeType === Node.TEXT_NODE) {
+            range.setStart(lastNode, lastNode.textContent.length);
+        } else {
+            range.setStartAfter(lastNode);
+        }
+    } else {
+        range.selectNodeContents(element);
+        range.collapse(false);
+    }
+
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
 }
 
 // Make functions available globally for inline event handlers
