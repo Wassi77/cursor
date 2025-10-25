@@ -24,6 +24,28 @@ const MAX_IMAGE_SIZE = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 let editorStatusTimeoutId = null;
 const inlineEditorStatusTimers = new WeakMap();
 
+// Auto-save configuration
+const AUTO_SAVE_DELAY_MS = 1500;
+const AUTO_SAVE_MAX_RETRIES = 3;
+const AUTO_SAVE_RETRY_DELAY_MS = 2000;
+
+const modalAutoSaveState = {
+    debounceId: null,
+    retryTimeoutId: null,
+    isSaving: false,
+    pendingChange: false,
+    lastSnapshot: { title: '', category: '', content: '' }
+};
+
+const inlineAutoSaveStates = new Map();
+let autoSaveSnapshotCounter = 0;
+
+function getNextSnapshotId() {
+    autoSaveSnapshotCounter += 1;
+    return autoSaveSnapshotCounter;
+}
+
+
 const elements = {
     loginScreen: document.getElementById('login-screen'),
     loginForm: document.getElementById('login-form'),
@@ -150,7 +172,9 @@ function setupEventListeners() {
     elements.newNoteBtn.addEventListener('click', openNewNoteModal);
     elements.closeModal.addEventListener('click', closeNoteModal);
     elements.cancelNoteBtn.addEventListener('click', closeNoteModal);
-    elements.noteForm.addEventListener('submit', saveNote);
+    elements.noteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+    });
     elements.searchInput.addEventListener('input', renderNotes);
     elements.categoryFilter.addEventListener('change', renderNotes);
     elements.sortSelect.addEventListener('change', renderNotes);
@@ -170,6 +194,15 @@ function setupEventListeners() {
 
     if (elements.noteContentEditor) {
         elements.noteContentEditor.addEventListener('paste', handleEditorPaste);
+        elements.noteContentEditor.addEventListener('input', handleModalEditorInput);
+    }
+
+    if (elements.noteTitle) {
+        elements.noteTitle.addEventListener('input', handleModalEditorInput);
+    }
+
+    if (elements.noteCategory) {
+        elements.noteCategory.addEventListener('input', handleModalEditorInput);
     }
 
     elements.noteModal.addEventListener('click', (e) => {
@@ -442,6 +475,7 @@ function openNewNoteModal() {
         elements.noteContentEditor.innerHTML = '';
     }
     elements.noteCategory.value = '';
+    resetModalAutoSaveState(null);
     clearEditorStatus();
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
@@ -459,14 +493,23 @@ function openEditNoteModal(noteId) {
         focusEditorAtEnd(elements.noteContentEditor);
     }
     elements.noteCategory.value = note.category || '';
-    clearEditorStatus();
+    resetModalAutoSaveState(note);
+    showEditorStatus('All changes saved ✓', 'success');
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
 
 function closeNoteModal() {
     elements.noteModal.classList.remove('open');
-    currentNote = null;
+
+    if (modalAutoSaveState.pendingChange && !modalAutoSaveState.isSaving) {
+        triggerModalAutoSave();
+    }
+
+    if (!modalAutoSaveState.isSaving) {
+        currentNote = null;
+    }
+
     clearEditorStatus();
 }
 
@@ -474,70 +517,233 @@ function closeArchivedModal() {
     elements.archivedModal.classList.remove('open');
 }
 
-async function saveNote(e) {
-    e.preventDefault();
+function resetModalAutoSaveState(note) {
+    clearModalAutoSaveTimers();
+    modalAutoSaveState.isSaving = false;
+    modalAutoSaveState.pendingChange = false;
+    modalAutoSaveState.lastSnapshot = note ? {
+        title: (note.title || '').trim(),
+        category: (note.category || '').trim(),
+        content: note.content || ''
+    } : { title: '', category: '', content: '' };
+}
 
+function clearModalAutoSaveTimers() {
+    if (modalAutoSaveState.debounceId) {
+        clearTimeout(modalAutoSaveState.debounceId);
+        modalAutoSaveState.debounceId = null;
+    }
+    if (modalAutoSaveState.retryTimeoutId) {
+        clearTimeout(modalAutoSaveState.retryTimeoutId);
+        modalAutoSaveState.retryTimeoutId = null;
+    }
+}
+
+function handleModalEditorInput() {
+    modalAutoSaveState.pendingChange = true;
+
+    if (modalAutoSaveState.isSaving) {
+        return;
+    }
+
+    showEditorStatus('Unsaved changes…', 'info');
+    scheduleModalAutoSave();
+}
+
+function scheduleModalAutoSave(options = {}) {
+    const { immediate = false } = options;
+
+    if (modalAutoSaveState.debounceId) {
+        clearTimeout(modalAutoSaveState.debounceId);
+        modalAutoSaveState.debounceId = null;
+    }
+
+    if (modalAutoSaveState.retryTimeoutId) {
+        clearTimeout(modalAutoSaveState.retryTimeoutId);
+        modalAutoSaveState.retryTimeoutId = null;
+    }
+
+    if (immediate) {
+        triggerModalAutoSave();
+        return;
+    }
+
+    modalAutoSaveState.debounceId = setTimeout(() => {
+        modalAutoSaveState.debounceId = null;
+        triggerModalAutoSave();
+    }, AUTO_SAVE_DELAY_MS);
+}
+
+function triggerModalAutoSave() {
+    if (!modalAutoSaveState.pendingChange) {
+        return;
+    }
+
+    const snapshot = buildModalSnapshot();
+    if (!snapshot) return;
+
+    const validation = validateNoteSnapshot(snapshot);
+    if (!validation.valid) {
+        showEditorStatus(validation.message, validation.type || 'info');
+        return;
+    }
+
+    if (modalAutoSaveState.lastSnapshot && snapshotsEqual(snapshot, modalAutoSaveState.lastSnapshot)) {
+        modalAutoSaveState.pendingChange = false;
+        showEditorStatus('All changes saved ✓', 'success', 2000);
+        return;
+    }
+
+    performModalAutoSave(snapshot);
+}
+
+function buildModalSnapshot() {
+    if (!elements.noteContentEditor) {
+        return null;
+    }
+
+    const title = (elements.noteTitle ? elements.noteTitle.value : '').trim();
+    const category = (elements.noteCategory ? elements.noteCategory.value : '').trim();
+    const rawContent = elements.noteContentEditor.innerHTML;
+    const sanitizedContent = sanitizeNoteContent(rawContent);
+    const hasContent = hasMeaningfulContent(sanitizedContent);
+
+    return {
+        id: getNextSnapshotId(),
+        title,
+        category,
+        content: sanitizedContent,
+        hasContent
+    };
+}
+
+function validateNoteSnapshot(snapshot) {
+    if (!snapshot) return { valid: false, message: 'Unable to capture note contents', type: 'error' };
+
+    if (!snapshot.title) {
+        return { valid: false, message: 'Enter a title to auto-save', type: 'info' };
+    }
+
+    if (!snapshot.hasContent) {
+        return { valid: false, message: 'Add content or images to auto-save', type: 'info' };
+    }
+
+    return { valid: true };
+}
+
+function snapshotsEqual(a, b) {
+    if (!a || !b) return false;
+    return a.title === b.title && a.category === b.category && a.content === b.content;
+}
+
+function getAutoSaveRetryDelay(attempt) {
+    return AUTO_SAVE_RETRY_DELAY_MS * Math.max(1, attempt);
+}
+
+async function performModalAutoSave(snapshot, attempt = 1) {
     if (!db) {
-        showToast('Cloud sync not available', 'error');
+        showEditorStatus('Cloud sync unavailable', 'error', 4000);
+        updateSyncStatus('error');
         return;
     }
 
-    const title = elements.noteTitle.value.trim();
-    const category = elements.noteCategory.value.trim();
-    const editorHtml = elements.noteContentEditor ? elements.noteContentEditor.innerHTML : '';
-    const sanitizedContent = sanitizeNoteContent(editorHtml);
-    const contentHasValue = hasMeaningfulContent(sanitizedContent);
-
-    if (!title) {
-        showToast('Please provide a note title', 'error');
-        elements.noteTitle.focus();
-        return;
+    if (modalAutoSaveState.debounceId) {
+        clearTimeout(modalAutoSaveState.debounceId);
+        modalAutoSaveState.debounceId = null;
     }
 
-    if (!contentHasValue) {
-        showToast('Add text or images to your note before saving', 'error');
-        if (elements.noteContentEditor) {
-            elements.noteContentEditor.focus();
-        }
-        return;
+    if (modalAutoSaveState.retryTimeoutId) {
+        clearTimeout(modalAutoSaveState.retryTimeoutId);
+        modalAutoSaveState.retryTimeoutId = null;
     }
 
-    if (elements.noteContentEditor) {
-        elements.noteContentEditor.innerHTML = sanitizedContent;
-    }
+    modalAutoSaveState.isSaving = true;
+    showEditorStatus('Saving...', 'info');
+    updateSyncStatus('syncing');
+
+    let scheduledRetry = false;
 
     try {
-        updateSyncStatus('syncing');
-
-        if (currentNote) {
-            // Update existing note
+        if (currentNote && currentNote.id) {
             await db.collection('notes').doc(currentNote.id).update({
-                title,
-                content: sanitizedContent,
-                category,
+                title: snapshot.title,
+                content: snapshot.content,
+                category: snapshot.category,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            showToast('Note updated successfully! ✅');
+
+            currentNote.title = snapshot.title;
+            currentNote.content = snapshot.content;
+            currentNote.plainContent = extractPlainTextFromHtml(snapshot.content);
+            currentNote.category = snapshot.category;
+            currentNote.updatedAt = new Date();
         } else {
-            // Create new note
-            await db.collection('notes').add({
-                title,
-                content: sanitizedContent,
-                category,
+            const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+            const docRef = await db.collection('notes').add({
+                title: snapshot.title,
+                content: snapshot.content,
+                category: snapshot.category,
                 tags: [],
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdAt: timestamp,
+                updatedAt: timestamp,
                 isPinned: false,
                 isArchived: false
             });
-            showToast('Note created successfully! 🎉');
+
+            currentNote = {
+                id: docRef.id,
+                title: snapshot.title,
+                content: snapshot.content,
+                plainContent: extractPlainTextFromHtml(snapshot.content),
+                category: snapshot.category,
+                tags: [],
+                isPinned: false,
+                isArchived: false,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
         }
 
-        closeNoteModal();
+        modalAutoSaveState.lastSnapshot = {
+            title: snapshot.title,
+            category: snapshot.category,
+            content: snapshot.content
+        };
+        modalAutoSaveState.pendingChange = false;
+
+        if (snapshot.category) {
+            categories.add(snapshot.category);
+            updateCategoryDatalist();
+            updateCategoryFilter();
+        }
+
+        if (!elements.noteModal.classList.contains('open')) {
+            currentNote = null;
+        }
+
+        showEditorStatus('All changes saved ✓', 'success', 2000);
     } catch (error) {
-        console.error('Save note error:', error);
-        showToast('Failed to save note: ' + error.message, 'error');
-        updateSyncStatus('error');
+        console.error('Modal auto-save error:', error);
+        scheduledRetry = attempt < AUTO_SAVE_MAX_RETRIES;
+
+        if (scheduledRetry) {
+            const nextAttempt = attempt + 1;
+            showEditorStatus(`Save failed. Retrying... (${nextAttempt}/${AUTO_SAVE_MAX_RETRIES})`, 'error');
+            modalAutoSaveState.retryTimeoutId = setTimeout(() => {
+                modalAutoSaveState.retryTimeoutId = null;
+                scheduleModalAutoSave({ immediate: true });
+            }, getAutoSaveRetryDelay(attempt));
+        } else {
+            showEditorStatus('Auto-save failed. Changes not saved.', 'error', 6000);
+            showToast('⚠️ Auto-save failed. Please check your connection.', 'error');
+            updateSyncStatus('error');
+        }
+    } finally {
+        modalAutoSaveState.isSaving = false;
+
+        if (!scheduledRetry && modalAutoSaveState.pendingChange) {
+            scheduleModalAutoSave({ immediate: true });
+        }
     }
 }
 
@@ -815,7 +1021,6 @@ function renderNotes() {
                     <div class="note-content inline-note-editor" contenteditable="${isExpanded ? 'true' : 'false'}" data-placeholder="Write your note here..."></div>
                 </div>
                 <div class="note-actions">
-                    <button class="inline-save-btn" data-note-id="${note.id}" style="display: none; background: rgba(34, 197, 94, 0.1); color: #22c55e;">💾 Save</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
                     <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
                     <button onclick="downloadNote('${note.id}')">💾 Download</button>
@@ -1089,6 +1294,7 @@ function insertImageIntoEditor(dataUrl, fileName = '') {
         selection.addRange(range);
     }
 
+    handleModalEditorInput();
     elements.noteContentEditor.focus();
 }
 
@@ -1129,6 +1335,7 @@ function insertTextAtCursor(text) {
         selection.addRange(range);
     }
 
+    handleModalEditorInput();
     elements.noteContentEditor.focus();
 }
 
@@ -1298,14 +1505,13 @@ function focusEditorAtEnd(element) {
 // Inline editing functions
 function setupInlineEditor(card, note, isExpanded) {
     const toolbar = card.querySelector('.inline-editor-toolbar');
-    const saveBtn = card.querySelector('.inline-save-btn');
     const uploadBtn = card.querySelector('.inline-upload-btn');
     const imageInput = card.querySelector('.inline-image-upload-input');
     const editor = card.querySelector('.inline-note-editor');
     const titleInput = card.querySelector('.inline-title-input');
     const categoryInput = card.querySelector('.inline-category-input');
 
-    if (!editor || !toolbar || !saveBtn) {
+    if (!editor || !toolbar) {
         return;
     }
 
@@ -1325,47 +1531,52 @@ function setupInlineEditor(card, note, isExpanded) {
         handleInlineEditorPaste(e, editor, card);
     });
 
-    saveBtn.addEventListener('click', () => {
-        saveInlineNote(note.id, card);
+    editor.addEventListener('input', () => {
+        handleInlineEditorInput(card, note);
     });
 
-    if (titleInput && editor) {
+    if (titleInput) {
+        titleInput.addEventListener('input', () => {
+            handleInlineEditorInput(card, note);
+        });
+
         titleInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                editor.focus();
+                if (editor) editor.focus();
             }
         });
     }
 
-    if (categoryInput && editor) {
+    if (categoryInput) {
+        categoryInput.addEventListener('input', () => {
+            handleInlineEditorInput(card, note);
+        });
+
         categoryInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                editor.focus();
+                if (editor) editor.focus();
             }
         });
     }
 
+    initializeInlineAutoSaveState(card, note);
     setInlineEditMode(card, note, isExpanded, { focus: false });
 }
 
 function setInlineEditMode(card, note, isEditing, options = {}) {
     const { focus = false } = options;
     const toolbar = card.querySelector('.inline-editor-toolbar');
-    const saveBtn = card.querySelector('.inline-save-btn');
     const editor = card.querySelector('.inline-note-editor');
     const statusElement = card.querySelector('.inline-editor-status');
     const titleInput = card.querySelector('.inline-title-input');
     const categoryInput = card.querySelector('.inline-category-input');
     const titleDisplay = card.querySelector('.note-title');
+    const state = inlineAutoSaveStates.get(note.id);
 
     if (toolbar) {
         toolbar.style.display = isEditing ? 'flex' : 'none';
-    }
-
-    if (saveBtn) {
-        saveBtn.style.display = isEditing ? 'inline-block' : 'none';
     }
 
     if (editor) {
@@ -1380,6 +1591,9 @@ function setInlineEditMode(card, note, isEditing, options = {}) {
 
         if (!isEditing) {
             editor.blur();
+            if (state && state.pendingChange && !state.isSaving) {
+                scheduleInlineAutoSave(note.id, card, { immediate: true });
+            }
             clearInlineEditorStatus(statusElement);
         }
     }
@@ -1406,125 +1620,283 @@ function setInlineEditMode(card, note, isEditing, options = {}) {
     card.classList.toggle('is-inline-editing', isEditing);
 }
 
-async function saveInlineNote(noteId, card) {
-    if (!db) {
-        showToast('Cloud sync not available', 'error');
+function initializeInlineAutoSaveState(card, note) {
+    const statusElement = card.querySelector('.inline-editor-status');
+    let state = inlineAutoSaveStates.get(note.id);
+
+    const snapshot = {
+        title: (note.title || '').trim(),
+        category: (note.category || '').trim(),
+        content: note.content || ''
+    };
+
+    if (!state) {
+        state = {
+            noteId: note.id,
+            debounceId: null,
+            retryTimeoutId: null,
+            isSaving: false,
+            pendingChange: false,
+            lastSnapshot: snapshot,
+            statusElement
+        };
+        inlineAutoSaveStates.set(note.id, state);
+    } else {
+        if (state.debounceId) {
+            clearTimeout(state.debounceId);
+            state.debounceId = null;
+        }
+        if (state.retryTimeoutId) {
+            clearTimeout(state.retryTimeoutId);
+            state.retryTimeoutId = null;
+        }
+        state.isSaving = false;
+        state.pendingChange = false;
+        state.lastSnapshot = snapshot;
+        state.statusElement = statusElement;
+    }
+
+    clearInlineEditorStatus(statusElement);
+}
+
+function handleInlineEditorInput(card, note) {
+    const state = inlineAutoSaveStates.get(note.id);
+    if (!state) return;
+
+    state.pendingChange = true;
+
+    if (state.isSaving) {
         return;
     }
 
-    const note = notes.find(n => n.id === noteId);
-    if (!note) return;
+    if (state.statusElement) {
+        showInlineEditorStatus(state.statusElement, 'Unsaved changes…', 'info');
+    }
 
+    scheduleInlineAutoSave(note.id, card);
+}
+
+function scheduleInlineAutoSave(noteId, card, options = {}) {
+    const state = inlineAutoSaveStates.get(noteId);
+    if (!state) return;
+
+    const { immediate = false } = options;
+
+    if (state.debounceId) {
+        clearTimeout(state.debounceId);
+        state.debounceId = null;
+    }
+
+    if (state.retryTimeoutId) {
+        clearTimeout(state.retryTimeoutId);
+        state.retryTimeoutId = null;
+    }
+
+    if (immediate) {
+        triggerInlineAutoSave(noteId, card);
+        return;
+    }
+
+    state.debounceId = setTimeout(() => {
+        state.debounceId = null;
+        triggerInlineAutoSave(noteId, card);
+    }, AUTO_SAVE_DELAY_MS);
+}
+
+function triggerInlineAutoSave(noteId, card) {
+    const state = inlineAutoSaveStates.get(noteId);
+    if (!state || !state.pendingChange) {
+        return;
+    }
+
+    const snapshot = buildInlineSnapshot(card);
+    if (!snapshot) {
+        return;
+    }
+
+    const validation = validateNoteSnapshot(snapshot);
+    if (!validation.valid) {
+        if (state.statusElement) {
+            showInlineEditorStatus(state.statusElement, validation.message, validation.type || 'info');
+        }
+        return;
+    }
+
+    if (state.lastSnapshot && snapshotsEqual(snapshot, state.lastSnapshot)) {
+        state.pendingChange = false;
+        if (state.statusElement) {
+            showInlineEditorStatus(state.statusElement, 'All changes saved ✓', 'success', 2000);
+        }
+        return;
+    }
+
+    performInlineAutoSave(noteId, card, snapshot);
+}
+
+function buildInlineSnapshot(card) {
     const editor = card.querySelector('.inline-note-editor');
+    if (!editor) return null;
+
     const titleInput = card.querySelector('.inline-title-input');
     const categoryInput = card.querySelector('.inline-category-input');
-    
-    if (!editor) return;
 
-    const title = (titleInput ? titleInput.value : (note.title || '')).trim();
-    const category = categoryInput ? categoryInput.value.trim() : (note.category || '');
-    const editorHtml = editor.innerHTML;
-    const sanitizedContent = sanitizeNoteContent(editorHtml);
-    const contentHasValue = hasMeaningfulContent(sanitizedContent);
+    const title = (titleInput ? titleInput.value : '').trim();
+    const category = (categoryInput ? categoryInput.value : '').trim();
+    const rawContent = editor.innerHTML;
+    const sanitizedContent = sanitizeNoteContent(rawContent);
+    const hasContent = hasMeaningfulContent(sanitizedContent);
 
-    if (!title) {
-        showToast('Please provide a note title', 'error');
-        if (titleInput) titleInput.focus();
+    return {
+        id: getNextSnapshotId(),
+        title,
+        category,
+        content: sanitizedContent,
+        hasContent
+    };
+}
+
+async function performInlineAutoSave(noteId, card, snapshot, attempt = 1) {
+    const state = inlineAutoSaveStates.get(noteId);
+    if (!state) return;
+
+    if (!db) {
+        if (state.statusElement) {
+            showInlineEditorStatus(state.statusElement, 'Cloud sync unavailable', 'error', 4000);
+        }
+        updateSyncStatus('error');
         return;
     }
 
-    if (!contentHasValue) {
-        showToast('Add text or images to your note before saving', 'error');
-        editor.focus();
-        return;
+    if (state.debounceId) {
+        clearTimeout(state.debounceId);
+        state.debounceId = null;
     }
 
-    editor.innerHTML = sanitizedContent;
+    if (state.retryTimeoutId) {
+        clearTimeout(state.retryTimeoutId);
+        state.retryTimeoutId = null;
+    }
 
-    const saveBtn = card.querySelector('.inline-save-btn');
-    const statusElement = card.querySelector('.inline-editor-status');
+    state.isSaving = true;
+    if (state.statusElement) {
+        showInlineEditorStatus(state.statusElement, 'Saving...', 'info');
+    }
+    updateSyncStatus('syncing');
+
+    let scheduledRetry = false;
 
     try {
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.classList.add('is-loading');
-            saveBtn.setAttribute('aria-busy', 'true');
-        }
-
-        showInlineEditorStatus(statusElement, 'Saving changes...', 'info');
-        updateSyncStatus('syncing');
-
         await db.collection('notes').doc(noteId).update({
-            title,
-            content: sanitizedContent,
-            category,
+            title: snapshot.title,
+            content: snapshot.content,
+            category: snapshot.category,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        if (titleInput) {
-            titleInput.value = title;
-        }
-        if (categoryInput) {
-            categoryInput.value = category;
+        const note = notes.find(n => n.id === noteId);
+        const previousCategory = note ? note.category : '';
+
+        if (note) {
+            note.title = snapshot.title;
+            note.category = snapshot.category;
+            note.content = snapshot.content;
+            note.plainContent = extractPlainTextFromHtml(snapshot.content);
+            note.updatedAt = new Date();
         }
 
-        const titleDisplay = card.querySelector('.note-title');
-        if (titleDisplay) {
-            const safeTitle = escapeHtml(title);
-            titleDisplay.innerHTML = note.isPinned ? `📌 ${safeTitle}` : safeTitle;
-        }
+        applyInlineSnapshotToCard(note, card, snapshot);
 
-        const tagChips = [];
-        if (category) {
-            tagChips.push(`<span class="note-tag note-tag--category">${escapeHtml(category)}</span>`);
-        }
-        if (Array.isArray(note.tags)) {
-            note.tags.filter(Boolean).forEach(tag => {
-                tagChips.push(`<span class="note-tag">${escapeHtml(tag)}</span>`);
-            });
-        }
+        state.lastSnapshot = {
+            title: snapshot.title,
+            category: snapshot.category,
+            content: snapshot.content
+        };
+        state.pendingChange = false;
 
-        let tagsContainer = card.querySelector('.note-tags');
-        const categoryField = card.querySelector('.inline-category-field');
-        const contentWrapper = card.querySelector('.note-content-wrapper');
-
-        if (tagChips.length) {
-            if (!tagsContainer) {
-                tagsContainer = document.createElement('div');
-                tagsContainer.className = 'note-tags';
-                if (categoryField) {
-                    categoryField.insertAdjacentElement('beforebegin', tagsContainer);
-                } else if (contentWrapper) {
-                    contentWrapper.insertAdjacentElement('beforebegin', tagsContainer);
-                }
-            }
-            tagsContainer.innerHTML = tagChips.join('');
-        } else if (tagsContainer) {
-            tagsContainer.remove();
+        if (snapshot.category && snapshot.category !== previousCategory) {
+            categories.add(snapshot.category);
         }
-
-        note.title = title;
-        note.category = category;
-        note.content = sanitizedContent;
-        note.plainContent = extractPlainTextFromHtml(sanitizedContent);
-        note.updatedAt = new Date();
 
         updateCategories();
         updateCategoryFilter();
 
-        showInlineEditorStatus(statusElement, 'Changes saved!', 'success', 2600);
-        showToast('Note updated successfully! ✅');
-    } catch (error) {
-        console.error('Save inline note error:', error);
-        showInlineEditorStatus(statusElement, 'Failed to save note', 'error', 3200);
-        showToast('Failed to save note: ' + error.message, 'error');
-        updateSyncStatus('error');
-    } finally {
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('is-loading');
-            saveBtn.removeAttribute('aria-busy');
+        if (state.statusElement) {
+            showInlineEditorStatus(state.statusElement, 'All changes saved ✓', 'success', 2000);
         }
+    } catch (error) {
+        console.error('Inline auto-save error:', error);
+        scheduledRetry = attempt < AUTO_SAVE_MAX_RETRIES;
+
+        if (scheduledRetry) {
+            if (state.statusElement) {
+                showInlineEditorStatus(state.statusElement, `Save failed. Retrying... (${attempt + 1}/${AUTO_SAVE_MAX_RETRIES})`, 'error');
+            }
+            state.retryTimeoutId = setTimeout(() => {
+                state.retryTimeoutId = null;
+                scheduleInlineAutoSave(noteId, card, { immediate: true });
+            }, getAutoSaveRetryDelay(attempt));
+        } else {
+            if (state.statusElement) {
+                showInlineEditorStatus(state.statusElement, 'Auto-save failed. Changes not saved.', 'error', 6000);
+            }
+            showToast('⚠️ Auto-save failed for a note. Please check your connection.', 'error');
+            updateSyncStatus('error');
+        }
+    } finally {
+        state.isSaving = false;
+
+        if (!scheduledRetry && state.pendingChange) {
+            scheduleInlineAutoSave(noteId, card, { immediate: true });
+        }
+    }
+}
+
+function applyInlineSnapshotToCard(note, card, snapshot) {
+    const titleDisplay = card.querySelector('.note-title');
+    const titleInput = card.querySelector('.inline-title-input');
+    const categoryInput = card.querySelector('.inline-category-input');
+
+    if (titleInput) {
+        titleInput.value = snapshot.title;
+    }
+
+    if (categoryInput) {
+        categoryInput.value = snapshot.category;
+    }
+
+    if (titleDisplay) {
+        const safeTitle = escapeHtml((snapshot.title || '').trim() || 'Untitled note');
+        const isPinned = note ? note.isPinned : false;
+        titleDisplay.innerHTML = isPinned ? `📌 ${safeTitle}` : safeTitle;
+    }
+
+    const tagChips = [];
+    if (snapshot.category) {
+        tagChips.push(`<span class="note-tag note-tag--category">${escapeHtml(snapshot.category)}</span>`);
+    }
+    if (note && Array.isArray(note.tags)) {
+        note.tags.filter(Boolean).forEach(tag => {
+            tagChips.push(`<span class="note-tag">${escapeHtml(tag)}</span>`);
+        });
+    }
+
+    let tagsContainer = card.querySelector('.note-tags');
+    const categoryField = card.querySelector('.inline-category-field');
+    const contentWrapper = card.querySelector('.note-content-wrapper');
+
+    if (tagChips.length) {
+        if (!tagsContainer) {
+            tagsContainer = document.createElement('div');
+            tagsContainer.className = 'note-tags';
+            if (categoryField) {
+                categoryField.insertAdjacentElement('beforebegin', tagsContainer);
+            } else if (contentWrapper) {
+                contentWrapper.insertAdjacentElement('beforebegin', tagsContainer);
+            }
+        }
+        tagsContainer.innerHTML = tagChips.join('');
+    } else if (tagsContainer) {
+        tagsContainer.remove();
     }
 }
 
@@ -1565,7 +1937,7 @@ function handleInlineEditorPaste(event, editor, card) {
     const text = clipboardData.getData('text/plain');
     if (typeof text === 'string' && text.length > 0) {
         event.preventDefault();
-        insertTextAtCursorInline(text, editor);
+        insertTextAtCursorInline(text, editor, card);
     }
 }
 
@@ -1582,7 +1954,7 @@ async function processInlineImage(file, editor, card) {
         showInlineEditorStatus(statusElement, 'Adding image...', 'info');
 
         const dataUrl = await readFileAsDataURL(file);
-        insertImageIntoInlineEditor(dataUrl, file.name, editor);
+        insertImageIntoInlineEditor(dataUrl, file.name, editor, card);
 
         showToast('Image added to note 🖼️');
         showInlineEditorStatus(statusElement, `Image added (${formatFileSize(file.size)})`, 'success', 3200);
@@ -1598,7 +1970,7 @@ async function processInlineImage(file, editor, card) {
     }
 }
 
-function insertImageIntoInlineEditor(dataUrl, fileName, editor) {
+function insertImageIntoInlineEditor(dataUrl, fileName, editor, card) {
     if (!editor) return;
 
     const img = document.createElement('img');
@@ -1636,10 +2008,18 @@ function insertImageIntoInlineEditor(dataUrl, fileName, editor) {
         selection.addRange(range);
     }
 
+    const noteId = editor.dataset.noteId;
+    if (noteId && card) {
+        const note = notes.find(n => n.id === noteId);
+        if (note) {
+            handleInlineEditorInput(card, note);
+        }
+    }
+
     editor.focus();
 }
 
-function insertTextAtCursorInline(text, editor) {
+function insertTextAtCursorInline(text, editor, card) {
     if (!editor) return;
 
     const normalizedText = text.replace(/\r\n/g, '\n');
@@ -1674,6 +2054,16 @@ function insertTextAtCursorInline(text, editor) {
     if (selection) {
         selection.removeAllRanges();
         selection.addRange(range);
+    }
+
+    if (card) {
+        const noteId = editor.dataset.noteId;
+        if (noteId) {
+            const note = notes.find(n => n.id === noteId);
+            if (note) {
+                handleInlineEditorInput(card, note);
+            }
+        }
     }
 
     editor.focus();
