@@ -22,6 +22,7 @@ const SUPPORTED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_IMAGE_SIZE = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 let editorStatusTimeoutId = null;
+const inlineEditorStatusTimers = new WeakMap();
 
 const elements = {
     loginScreen: document.getElementById('login-screen'),
@@ -780,6 +781,7 @@ function renderNotes() {
         const tagsHtml = tagChips.length ? `<div class="note-tags">${tagChips.join('')}</div>` : '';
 
         const noteContent = note.content || '';
+        const safeCategoryValue = escapeHtml(note.category || '');
 
         card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
         card.dataset.noteId = note.id;
@@ -789,14 +791,31 @@ function renderNotes() {
                 <button class="note-toggle" type="button" title="${toggleTitle}" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="${noteBodyId}" aria-label="${toggleLabel}">
                     <span class="note-toggle-icon" aria-hidden="true"></span>
                 </button>
-                <h2 class="note-title">${titleWithPin}</h2>
+                <div class="note-title-group">
+                    <h2 class="note-title">${titleWithPin}</h2>
+                    <input class="inline-title-input" type="text" value="${safeTitle}" placeholder="Note title" aria-label="Edit note title" autocomplete="off">
+                </div>
             </div>
             <div id="${noteBodyId}" class="note-body">
                 ${metaHtml}
                 ${tagsHtml}
-                <div class="note-content"></div>
+                <div class="inline-field-row inline-category-field">
+                    <label class="inline-field-label" for="inline-category-${note.id}">Category</label>
+                    <input id="inline-category-${note.id}" class="inline-category-input" type="text" value="${safeCategoryValue}" placeholder="Add a category" list="categories-list" autocomplete="off" aria-label="Edit note category">
+                </div>
+                <div class="note-content-wrapper">
+                    <div class="note-editor-toolbar inline-editor-toolbar" style="display: none;">
+                        <button type="button" class="btn btn-secondary note-editor-upload-btn inline-upload-btn" data-note-id="${note.id}">
+                            🖼️ Upload Image
+                        </button>
+                        <input type="file" class="inline-image-upload-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" multiple hidden>
+                        <span class="note-editor-hint">Tip: Paste images with Ctrl+V or Cmd+V</span>
+                        <span class="inline-editor-status note-editor-status" aria-live="polite"></span>
+                    </div>
+                    <div class="note-content inline-note-editor" contenteditable="${isExpanded ? 'true' : 'false'}" data-placeholder="Write your note here..."></div>
+                </div>
                 <div class="note-actions">
-                    <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
+                    <button class="inline-save-btn" data-note-id="${note.id}" style="display: none; background: rgba(34, 197, 94, 0.1); color: #22c55e;">💾 Save</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
                     <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
                     <button onclick="downloadNote('${note.id}')">💾 Download</button>
@@ -809,6 +828,8 @@ function renderNotes() {
         if (contentDiv) {
             contentDiv.innerHTML = noteContent;
         }
+
+        setupInlineEditor(card, note, isExpanded);
 
         const noteBody = card.querySelector('.note-body');
         const toggleBtn = card.querySelector('.note-toggle');
@@ -833,7 +854,8 @@ function renderNotes() {
 function toggleCardExpansion(card, noteId) {
     const body = card.querySelector('.note-body');
     const toggleBtn = card.querySelector('.note-toggle');
-    if (!body || !toggleBtn) return;
+    const note = notes.find(n => n.id === noteId);
+    if (!body || !toggleBtn || !note) return;
 
     const shouldExpand = !card.classList.contains('expanded');
 
@@ -843,6 +865,7 @@ function toggleCardExpansion(card, noteId) {
         card.classList.remove('collapsed');
         toggleBtn.setAttribute('aria-expanded', 'true');
         toggleBtn.setAttribute('title', 'Collapse note');
+        setInlineEditMode(card, note, true, { focus: true });
 
         const targetHeight = body.scrollHeight;
         body.style.maxHeight = '0px';
@@ -863,6 +886,7 @@ function toggleCardExpansion(card, noteId) {
         card.classList.add('collapsed');
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.setAttribute('title', 'Expand note');
+        setInlineEditMode(card, note, false);
 
         const currentHeight = body.scrollHeight;
         body.style.maxHeight = `${currentHeight}px`;
@@ -1269,6 +1293,419 @@ function focusEditorAtEnd(element) {
     range.collapse(true);
     selection.removeAllRanges();
     selection.addRange(range);
+}
+
+// Inline editing functions
+function setupInlineEditor(card, note, isExpanded) {
+    const toolbar = card.querySelector('.inline-editor-toolbar');
+    const saveBtn = card.querySelector('.inline-save-btn');
+    const uploadBtn = card.querySelector('.inline-upload-btn');
+    const imageInput = card.querySelector('.inline-image-upload-input');
+    const editor = card.querySelector('.inline-note-editor');
+    const titleInput = card.querySelector('.inline-title-input');
+    const categoryInput = card.querySelector('.inline-category-input');
+
+    if (!editor || !toolbar || !saveBtn) {
+        return;
+    }
+
+    editor.dataset.noteId = note.id;
+
+    if (uploadBtn && imageInput) {
+        uploadBtn.addEventListener('click', () => {
+            imageInput.click();
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            handleInlineImageUpload(e, editor, card);
+        });
+    }
+
+    editor.addEventListener('paste', (e) => {
+        handleInlineEditorPaste(e, editor, card);
+    });
+
+    saveBtn.addEventListener('click', () => {
+        saveInlineNote(note.id, card);
+    });
+
+    if (titleInput && editor) {
+        titleInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                editor.focus();
+            }
+        });
+    }
+
+    if (categoryInput && editor) {
+        categoryInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                editor.focus();
+            }
+        });
+    }
+
+    setInlineEditMode(card, note, isExpanded, { focus: false });
+}
+
+function setInlineEditMode(card, note, isEditing, options = {}) {
+    const { focus = false } = options;
+    const toolbar = card.querySelector('.inline-editor-toolbar');
+    const saveBtn = card.querySelector('.inline-save-btn');
+    const editor = card.querySelector('.inline-note-editor');
+    const statusElement = card.querySelector('.inline-editor-status');
+    const titleInput = card.querySelector('.inline-title-input');
+    const categoryInput = card.querySelector('.inline-category-input');
+    const titleDisplay = card.querySelector('.note-title');
+
+    if (toolbar) {
+        toolbar.style.display = isEditing ? 'flex' : 'none';
+    }
+
+    if (saveBtn) {
+        saveBtn.style.display = isEditing ? 'inline-block' : 'none';
+    }
+
+    if (editor) {
+        editor.setAttribute('contenteditable', isEditing ? 'true' : 'false');
+        editor.classList.toggle('is-editing', isEditing);
+
+        if (isEditing && focus) {
+            requestAnimationFrame(() => {
+                focusEditorAtEnd(editor);
+            });
+        }
+
+        if (!isEditing) {
+            editor.blur();
+            clearInlineEditorStatus(statusElement);
+        }
+    }
+
+    if (titleInput) {
+        titleInput.disabled = !isEditing;
+        if (!isEditing && note) {
+            titleInput.value = note.title || '';
+        }
+    }
+
+    if (categoryInput) {
+        categoryInput.disabled = !isEditing;
+        if (!isEditing && note) {
+            categoryInput.value = note.category || '';
+        }
+    }
+
+    if (!isEditing && titleDisplay && note) {
+        const safeTitle = escapeHtml((note.title || '').trim() || 'Untitled note');
+        titleDisplay.innerHTML = note.isPinned ? `📌 ${safeTitle}` : safeTitle;
+    }
+
+    card.classList.toggle('is-inline-editing', isEditing);
+}
+
+async function saveInlineNote(noteId, card) {
+    if (!db) {
+        showToast('Cloud sync not available', 'error');
+        return;
+    }
+
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const editor = card.querySelector('.inline-note-editor');
+    const titleInput = card.querySelector('.inline-title-input');
+    const categoryInput = card.querySelector('.inline-category-input');
+    
+    if (!editor) return;
+
+    const title = (titleInput ? titleInput.value : (note.title || '')).trim();
+    const category = categoryInput ? categoryInput.value.trim() : (note.category || '');
+    const editorHtml = editor.innerHTML;
+    const sanitizedContent = sanitizeNoteContent(editorHtml);
+    const contentHasValue = hasMeaningfulContent(sanitizedContent);
+
+    if (!title) {
+        showToast('Please provide a note title', 'error');
+        if (titleInput) titleInput.focus();
+        return;
+    }
+
+    if (!contentHasValue) {
+        showToast('Add text or images to your note before saving', 'error');
+        editor.focus();
+        return;
+    }
+
+    editor.innerHTML = sanitizedContent;
+
+    const saveBtn = card.querySelector('.inline-save-btn');
+    const statusElement = card.querySelector('.inline-editor-status');
+
+    try {
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('is-loading');
+            saveBtn.setAttribute('aria-busy', 'true');
+        }
+
+        showInlineEditorStatus(statusElement, 'Saving changes...', 'info');
+        updateSyncStatus('syncing');
+
+        await db.collection('notes').doc(noteId).update({
+            title,
+            content: sanitizedContent,
+            category,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (titleInput) {
+            titleInput.value = title;
+        }
+        if (categoryInput) {
+            categoryInput.value = category;
+        }
+
+        const titleDisplay = card.querySelector('.note-title');
+        if (titleDisplay) {
+            const safeTitle = escapeHtml(title);
+            titleDisplay.innerHTML = note.isPinned ? `📌 ${safeTitle}` : safeTitle;
+        }
+
+        const tagChips = [];
+        if (category) {
+            tagChips.push(`<span class="note-tag note-tag--category">${escapeHtml(category)}</span>`);
+        }
+        if (Array.isArray(note.tags)) {
+            note.tags.filter(Boolean).forEach(tag => {
+                tagChips.push(`<span class="note-tag">${escapeHtml(tag)}</span>`);
+            });
+        }
+
+        let tagsContainer = card.querySelector('.note-tags');
+        const categoryField = card.querySelector('.inline-category-field');
+        const contentWrapper = card.querySelector('.note-content-wrapper');
+
+        if (tagChips.length) {
+            if (!tagsContainer) {
+                tagsContainer = document.createElement('div');
+                tagsContainer.className = 'note-tags';
+                if (categoryField) {
+                    categoryField.insertAdjacentElement('beforebegin', tagsContainer);
+                } else if (contentWrapper) {
+                    contentWrapper.insertAdjacentElement('beforebegin', tagsContainer);
+                }
+            }
+            tagsContainer.innerHTML = tagChips.join('');
+        } else if (tagsContainer) {
+            tagsContainer.remove();
+        }
+
+        note.title = title;
+        note.category = category;
+        note.content = sanitizedContent;
+        note.plainContent = extractPlainTextFromHtml(sanitizedContent);
+        note.updatedAt = new Date();
+
+        updateCategories();
+        updateCategoryFilter();
+
+        showInlineEditorStatus(statusElement, 'Changes saved!', 'success', 2600);
+        showToast('Note updated successfully! ✅');
+    } catch (error) {
+        console.error('Save inline note error:', error);
+        showInlineEditorStatus(statusElement, 'Failed to save note', 'error', 3200);
+        showToast('Failed to save note: ' + error.message, 'error');
+        updateSyncStatus('error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('is-loading');
+            saveBtn.removeAttribute('aria-busy');
+        }
+    }
+}
+
+async function handleInlineImageUpload(event, editor, card) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+        return;
+    }
+
+    for (const file of files) {
+        if (!validateImageFile(file)) {
+            continue;
+        }
+        await processInlineImage(file, editor, card);
+    }
+
+    event.target.value = '';
+}
+
+function handleInlineEditorPaste(event, editor, card) {
+    if (!editor) return;
+
+    const clipboardData = event.clipboardData;
+    if (!clipboardData) return;
+
+    const items = clipboardData.items ? Array.from(clipboardData.items) : [];
+    const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+
+    if (imageItem) {
+        event.preventDefault();
+        const file = imageItem.getAsFile();
+        if (file && validateImageFile(file)) {
+            processInlineImage(file, editor, card);
+        }
+        return;
+    }
+
+    const text = clipboardData.getData('text/plain');
+    if (typeof text === 'string' && text.length > 0) {
+        event.preventDefault();
+        insertTextAtCursorInline(text, editor);
+    }
+}
+
+async function processInlineImage(file, editor, card) {
+    const statusElement = card.querySelector('.inline-editor-status');
+    const uploadBtn = card.querySelector('.inline-upload-btn');
+
+    try {
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.classList.add('is-loading');
+        }
+        
+        showInlineEditorStatus(statusElement, 'Adding image...', 'info');
+
+        const dataUrl = await readFileAsDataURL(file);
+        insertImageIntoInlineEditor(dataUrl, file.name, editor);
+
+        showToast('Image added to note 🖼️');
+        showInlineEditorStatus(statusElement, `Image added (${formatFileSize(file.size)})`, 'success', 3200);
+    } catch (error) {
+        console.error('Image processing error:', error);
+        showInlineEditorStatus(statusElement, 'Failed to add image', 'error', 4000);
+        showToast('Failed to add image', 'error');
+    } finally {
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.classList.remove('is-loading');
+        }
+    }
+}
+
+function insertImageIntoInlineEditor(dataUrl, fileName, editor) {
+    if (!editor) return;
+
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    const trimmedName = (fileName || '').trim();
+    if (trimmedName) {
+        const altText = trimmedName.replace(/\.[^/.]+$/, '');
+        img.alt = altText || 'Note image';
+        img.title = trimmedName;
+    } else {
+        img.alt = 'Note image';
+    }
+    img.loading = 'lazy';
+
+    const selection = window.getSelection();
+    let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    if (!range || !editor.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+    }
+
+    range.deleteContents();
+    range.insertNode(img);
+
+    const spacer = document.createElement('br');
+    img.insertAdjacentElement('afterend', spacer);
+
+    range.setStartAfter(spacer);
+    range.collapse(true);
+
+    if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    editor.focus();
+}
+
+function insertTextAtCursorInline(text, editor) {
+    if (!editor) return;
+
+    const normalizedText = text.replace(/\r\n/g, '\n');
+    const lines = normalizedText.split('\n');
+
+    const selection = window.getSelection();
+    let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    if (!range || !editor.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+    }
+
+    range.deleteContents();
+
+    lines.forEach((line, index) => {
+        if (line.length) {
+            const textNode = document.createTextNode(line);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+        }
+        if (index < lines.length - 1) {
+            const br = document.createElement('br');
+            range.insertNode(br);
+            range.setStartAfter(br);
+        }
+    });
+
+    range.collapse(true);
+
+    if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    editor.focus();
+}
+
+function showInlineEditorStatus(statusElement, message, type = 'info', duration = 0) {
+    if (!statusElement) return;
+
+    clearInlineEditorStatus(statusElement);
+
+    statusElement.textContent = message;
+    statusElement.classList.add(`note-editor-status--${type}`);
+
+    if (duration > 0) {
+        const timerId = setTimeout(() => {
+            clearInlineEditorStatus(statusElement);
+        }, duration);
+        inlineEditorStatusTimers.set(statusElement, timerId);
+    }
+}
+
+function clearInlineEditorStatus(statusElement) {
+    if (!statusElement) return;
+
+    const existingTimer = inlineEditorStatusTimers.get(statusElement);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+        inlineEditorStatusTimers.delete(statusElement);
+    }
+
+    statusElement.textContent = '';
+    statusElement.className = 'inline-editor-status note-editor-status';
 }
 
 // Make functions available globally for inline event handlers
