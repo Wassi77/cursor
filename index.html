@@ -83,7 +83,17 @@
                     <input type="text" id="note-title" placeholder="Note title" required>
                 </div>
                 <div class="form-group">
-                    <textarea id="note-content" placeholder="Write your note here..." rows="10" required></textarea>
+                    <label for="note-content" class="form-label">Note Content</label>
+                    <div class="content-editor">
+                        <textarea id="note-content" placeholder="Write your note here... You can paste images directly with Ctrl+V (or Cmd+V)" rows="10" required></textarea>
+                        <div class="editor-toolbar">
+                            <button type="button" id="upload-image-btn" class="btn btn-secondary btn-sm" title="Upload image">
+                                📷 Upload Image
+                            </button>
+                            <input type="file" id="image-input" accept="image/*" multiple style="display: none;">
+                        </div>
+                    </div>
+                    <div id="image-preview-container" class="image-preview-container"></div>
                 </div>
                 <div class="form-group">
                     <input type="text" id="note-category" placeholder="Category (optional)" list="categories-list">
@@ -126,6 +136,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     
     <!-- Firebase Configuration (optional - only if firebase-config.js exists) -->
     <script src="firebase-config.js" onerror="console.warn('Firebase config not found. Please create firebase-config.js from firebase-config.example.js')"></script>

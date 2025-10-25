@@ -15,6 +15,17 @@ A password-protected personal note-taking web application designed for Netlify d
 - **Read**: View all notes in an organized list
 - **Update**: Edit existing notes from any device
 - **Delete**: Remove notes with confirmation dialog
+- **📷 Image Support**: Upload and paste images directly into notes
+
+### 🖼️ Image Features
+- **Upload Images**: Click the "📷 Upload Image" button to add pictures to notes
+- **Paste Images**: Paste images directly using Ctrl+V (or Cmd+V on Mac)
+- **Image Preview**: See uploaded images in both the editor and note cards
+- **Multiple Formats**: Support for PNG, JPG, GIF, and WebP formats
+- **File Size Limits**: Maximum 5MB per image with validation
+- **Cloud Storage**: Images stored securely in Firebase Storage
+- **Responsive Display**: Images adapt to different screen sizes
+- **Click to View**: Click thumbnails to view full-size images
 
 ### 🏷️ Organization Features
 - **Categorize**: Add categories/tags to notes for better organization
@@ -40,6 +51,7 @@ A password-protected personal note-taking web application designed for Netlify d
 ### ⚡ Technical Implementation
 - Pure HTML, CSS, JavaScript (no dependencies)
 - **Cloud Database**: Firebase Firestore for cross-device sync
+- **Cloud Storage**: Firebase Storage for image hosting
 - **Offline Support**: Works without internet, syncs when reconnected
 - **Real-time Sync**: Instant updates across all devices
 - **Migration**: Automatic migration from localStorage to cloud

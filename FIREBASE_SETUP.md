@@ -85,7 +85,41 @@ If you want to restrict access to a specific authentication token or password ha
 
 3. Click **"Publish"** to save the rules
 
-## Step 6: Enable Anonymous Authentication
+## Step 6: Enable Firebase Storage for Images
+
+To support image uploads and storage:
+
+1. In Firebase Console, click **"Storage"** in the left sidebar
+2. Click **"Get started"** (if it's your first time)
+3. Choose **"Start in production mode"** 
+4. Select a Cloud Storage location (same as your Firestore location)
+5. Click **"Enable"**
+
+### Configure Storage Security Rules
+
+1. In Storage, click **"Rules"** tab
+2. Replace the default rules with the following:
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow authenticated users to read and write images
+    match /images/{imageId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+3. Click **"Publish"** to save the rules
+
+## Step 7: Enable Anonymous Authentication
 
 1. In the Firebase Console, click **"Authentication"** in the left sidebar
 2. Click **"Get started"** (if it's your first time)
@@ -94,7 +128,7 @@ If you want to restrict access to a specific authentication token or password ha
 5. Toggle **"Enable"** to ON
 6. Click **"Save"**
 
-## Step 7: Test Your Setup
+## Step 8: Test Your Setup
 
 1. Open your notes application in a web browser
 2. Enter your password (default: `notes123` or what you set in `firebase-config.js`)
