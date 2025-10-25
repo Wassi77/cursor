@@ -16,6 +16,11 @@ A password-protected personal note-taking web application designed for Netlify d
 - **Update**: Edit existing notes from any device
 - **Delete**: Remove notes with confirmation dialog
 
+### 🖼️ Image Support
+- **Upload**: Attach images to notes directly from your device
+- **Paste**: Insert screenshots or clipboard images with `Ctrl + V`
+- **Inline Display**: View images alongside note content with smooth previews
+
 ### 🏷️ Organization Features
 - **Categorize**: Add categories/tags to notes for better organization
 - **Search**: Real-time search across titles, content, and categories
@@ -158,13 +163,16 @@ window.firestoreAccessPassword = "your-secure-password";
 ### Creating Notes
 1. Click the "➕ New Note" button
 2. Enter a title and content (required)
-3. Optionally add a category
-4. Click "Save Note"
+3. Optionally add images:
+   - Click "🖼️ Add Images" to upload from your device
+   - Press `Ctrl + V` in the text area to paste images from clipboard
+4. Optionally add a category
+5. Click "Save Note"
 
 ### Editing Notes
 1. Find your note in the list
 2. Click the "✏️ Edit" button
-3. Make your changes
+3. Make your changes (text, images, category)
 4. Click "Save Note"
 
 ### Organizing Notes

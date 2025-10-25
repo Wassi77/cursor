@@ -11,6 +11,12 @@ let notes = [];
 let categories = new Set();
 const expandedNoteIds = new Set();
 
+const MAX_NOTE_IMAGES = 10;
+const MAX_IMAGE_FILE_SIZE = 500 * 1024; // 500 KB
+const MAX_TOTAL_IMAGE_DATA_LENGTH = 900 * 1024; // ~900 KB of base64 data per note
+
+let currentNoteImages = [];
+
 const elements = {
     loginScreen: document.getElementById('login-screen'),
     loginForm: document.getElementById('login-form'),
@@ -42,7 +48,10 @@ const elements = {
     noteContent: document.getElementById('note-content'),
     noteCategory: document.getElementById('note-category'),
     categoriesList: document.getElementById('categories-list'),
-    toastContainer: document.getElementById('toast-container')
+    toastContainer: document.getElementById('toast-container'),
+    imageUploadBtn: document.getElementById('image-upload-btn'),
+    imageUploadInput: document.getElementById('image-upload-input'),
+    imagePreviewContainer: document.getElementById('image-preview-container')
 };
 
 const SYNC_STATUS_META = {
@@ -143,6 +152,15 @@ function setupEventListeners() {
     elements.closeArchivedModal.addEventListener('click', closeArchivedModal);
     elements.migrateYesBtn.addEventListener('click', handleMigrationYes);
     elements.migrateSkipBtn.addEventListener('click', handleMigrationSkip);
+
+    if (elements.imageUploadBtn && elements.imageUploadInput) {
+        elements.imageUploadBtn.addEventListener('click', () => elements.imageUploadInput.click());
+        elements.imageUploadInput.addEventListener('change', handleImageUploadChange);
+    }
+
+    if (elements.noteContent) {
+        elements.noteContent.addEventListener('paste', handleNoteContentPaste);
+    }
 
     elements.noteModal.addEventListener('click', (e) => {
         if (e.target === elements.noteModal) {
@@ -280,6 +298,7 @@ async function handleMigrationYes() {
                 content: note?.content || '',
                 category: note?.category || '',
                 tags: Array.isArray(note?.tags) ? note.tags : [],
+                images: normalizeNoteImages(note?.images),
                 createdAt: note?.created ? new Date(note.created) : firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: note?.modified ? new Date(note.modified) : firebase.firestore.FieldValue.serverTimestamp(),
                 isPinned: Boolean(note?.pinned),
@@ -331,7 +350,8 @@ function startRealtimeSync() {
                         createdAt: getDateFromValue(data.createdAt),
                         updatedAt: getDateFromValue(data.updatedAt),
                         isPinned: data.isPinned || false,
-                        isArchived: data.isArchived || false
+                        isArchived: data.isArchived || false,
+                        images: normalizeNoteImages(data.images)
                     };
 
                     newNoteIds.add(doc.id);
@@ -410,6 +430,9 @@ function openNewNoteModal() {
     elements.noteTitle.value = '';
     elements.noteContent.value = '';
     elements.noteCategory.value = '';
+    currentNoteImages = [];
+    renderImagePreview();
+    resetImageUploadInput();
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
 }
@@ -423,13 +446,244 @@ function openEditNoteModal(noteId) {
     elements.noteTitle.value = note.title;
     elements.noteContent.value = note.content;
     elements.noteCategory.value = note.category || '';
+    currentNoteImages = normalizeNoteImages(note.images);
+    renderImagePreview();
+    resetImageUploadInput();
     elements.noteModal.classList.add('open');
     elements.noteTitle.focus();
+}
+
+function generateImageId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `img_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function cloneNoteImage(image = {}) {
+    const dataUrl = typeof image.dataUrl === 'string'
+        ? image.dataUrl
+        : typeof image.data === 'string'
+            ? image.data
+            : '';
+
+    if (!dataUrl) {
+        return null;
+    }
+
+    return {
+        id: image.id || generateImageId(),
+        dataUrl,
+        name: typeof image.name === 'string' ? image.name : '',
+        mimeType: typeof image.mimeType === 'string' ? image.mimeType : (typeof image.type === 'string' ? image.type : ''),
+        size: typeof image.size === 'number' ? image.size : null,
+        addedAt: typeof image.addedAt === 'string' ? image.addedAt : new Date().toISOString()
+    };
+}
+
+function normalizeNoteImages(images) {
+    if (!Array.isArray(images)) {
+        return [];
+    }
+
+    return images
+        .map(cloneNoteImage)
+        .filter(Boolean);
+}
+
+function resetImageUploadInput() {
+    if (elements.imageUploadInput) {
+        elements.imageUploadInput.value = '';
+    }
+}
+
+async function handleImageUploadChange(event) {
+    const { files } = event.target || {};
+    if (!files || !files.length) return;
+
+    await processImageFiles(files);
+    resetImageUploadInput();
+}
+
+async function handleNoteContentPaste(event) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles = [];
+
+    for (const item of items) {
+        if (!item || !item.type || !item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (file) {
+            imageFiles.push(file);
+        }
+    }
+
+    if (!imageFiles.length) {
+        return;
+    }
+
+    const hasText = !!event.clipboardData.getData('text/plain');
+    if (!hasText) {
+        event.preventDefault();
+    }
+
+    await processImageFiles(imageFiles);
+    showToast(imageFiles.length > 1 ? 'Images pasted successfully! 🖼️' : 'Image pasted successfully! 🖼️');
+}
+
+async function processImageFiles(fileSource) {
+    const files = Array.isArray(fileSource) ? fileSource : Array.from(fileSource || []);
+    if (!files.length) return;
+
+    let availableSlots = MAX_NOTE_IMAGES - currentNoteImages.length;
+    if (availableSlots <= 0) {
+        showToast(`You can attach up to ${MAX_NOTE_IMAGES} images per note.`, 'warning');
+        return;
+    }
+
+    for (const file of files) {
+        if (availableSlots <= 0) {
+            showToast(`Maximum of ${MAX_NOTE_IMAGES} images reached.`, 'warning');
+            break;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            showToast(`Skipping ${file.name}: not an image file.`, 'warning');
+            continue;
+        }
+
+        if (file.size > MAX_IMAGE_FILE_SIZE) {
+            showToast(`Skipping ${file.name}: too large (max ${(MAX_IMAGE_FILE_SIZE / 1024).toFixed(0)} KB).`, 'warning');
+            continue;
+        }
+
+        try {
+            const dataUrl = await fileToDataUrl(file);
+
+            currentNoteImages.push({
+                id: generateImageId(),
+                dataUrl,
+                name: file.name,
+                mimeType: file.type,
+                size: file.size,
+                addedAt: new Date().toISOString()
+            });
+
+            if (getCurrentImageDataLength() > MAX_TOTAL_IMAGE_DATA_LENGTH) {
+                currentNoteImages.pop();
+                showToast('Cannot add image: total image data exceeds the limit for a note.', 'error');
+                break;
+            }
+
+            availableSlots--;
+        } catch (error) {
+            console.error('Image processing error:', error);
+            showToast(`Failed to add ${file.name}`, 'error');
+        }
+    }
+
+    renderImagePreview();
+}
+
+function getCurrentImageDataLength() {
+    return currentNoteImages.reduce((total, image) => total + (image?.dataUrl?.length || 0), 0);
+}
+
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function renderImagePreview() {
+    if (!elements.imagePreviewContainer) return;
+
+    const container = elements.imagePreviewContainer;
+    container.innerHTML = '';
+
+    if (!currentNoteImages.length) {
+        const hint = document.createElement('p');
+        hint.className = 'image-preview-empty';
+        hint.textContent = 'No images added yet.';
+        container.appendChild(hint);
+        return;
+    }
+
+    currentNoteImages.forEach((image, index) => {
+        const item = document.createElement('div');
+        item.className = 'image-preview-item';
+        item.dataset.imageId = image.id;
+
+        const thumb = document.createElement('img');
+        thumb.className = 'image-preview-thumb';
+        thumb.src = image.dataUrl;
+        thumb.alt = image.name ? `Image: ${image.name}` : `Image ${index + 1}`;
+        thumb.loading = 'lazy';
+
+        const info = document.createElement('div');
+        info.className = 'image-preview-info';
+
+        const name = document.createElement('span');
+        name.className = 'image-preview-name';
+        name.textContent = image.name || `Image ${index + 1}`;
+        info.appendChild(name);
+
+        if (typeof image.size === 'number') {
+            const size = document.createElement('span');
+            size.className = 'image-preview-size';
+            size.textContent = formatImageSize(image.size);
+            info.appendChild(size);
+        }
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'image-preview-remove';
+        removeBtn.textContent = 'Remove';
+        removeBtn.setAttribute('aria-label', `Remove ${image.name || `image ${index + 1}`}`);
+        removeBtn.addEventListener('click', () => {
+            removeNoteImage(image.id);
+        });
+
+        info.appendChild(removeBtn);
+
+        item.appendChild(thumb);
+        item.appendChild(info);
+
+        container.appendChild(item);
+    });
+}
+
+function formatImageSize(bytes) {
+    if (typeof bytes !== 'number' || Number.isNaN(bytes)) {
+        return '';
+    }
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function removeNoteImage(imageId) {
+    const index = currentNoteImages.findIndex(image => image.id === imageId);
+    if (index === -1) {
+        return;
+    }
+
+    currentNoteImages.splice(index, 1);
+    renderImagePreview();
+    showToast('Image removed');
 }
 
 function closeNoteModal() {
     elements.noteModal.classList.remove('open');
     currentNote = null;
+    currentNoteImages = [];
+    renderImagePreview();
+    resetImageUploadInput();
 }
 
 function closeArchivedModal() {
@@ -456,24 +710,23 @@ async function saveNote(e) {
     try {
         updateSyncStatus('syncing');
 
+        const images = normalizeNoteImages(currentNoteImages);
+        const noteData = {
+            title,
+            content,
+            category,
+            images,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
         if (currentNote) {
-            // Update existing note
-            await db.collection('notes').doc(currentNote.id).update({
-                title,
-                content,
-                category,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            await db.collection('notes').doc(currentNote.id).update(noteData);
             showToast('Note updated successfully! ✅');
         } else {
-            // Create new note
             await db.collection('notes').add({
-                title,
-                content,
-                category,
+                ...noteData,
                 tags: [],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 isPinned: false,
                 isArchived: false
             });
@@ -558,7 +811,16 @@ function downloadNote(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
-    const content = `${note.title}\n${'='.repeat(note.title.length)}\n\nCategory: ${note.category || 'None'}\nCreated: ${note.createdAt.toLocaleString()}\nModified: ${note.updatedAt.toLocaleString()}\n\n${note.content}`;
+    let content = `${note.title}\n${'='.repeat(note.title.length)}\n\nCategory: ${note.category || 'None'}\nCreated: ${note.createdAt.toLocaleString()}\nModified: ${note.updatedAt.toLocaleString()}\n\n${note.content}`;
+
+    if (Array.isArray(note.images) && note.images.length > 0) {
+        const imageLines = note.images.map((image, index) => {
+            const name = image.name || `Image ${index + 1}`;
+            const dataUrl = image.dataUrl || '';
+            return `[${index + 1}] ${name}\n${dataUrl}`;
+        }).join('\n\n');
+        content += `\n\nImages (${note.images.length}):\n${imageLines}`;
+    }
 
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -727,6 +989,15 @@ function renderNotes() {
         const tagsHtml = tagChips.length ? `<div class="note-tags">${tagChips.join('')}</div>` : '';
 
         const noteContent = escapeHtml(note.content || '');
+        const noteImages = Array.isArray(note.images) ? note.images : [];
+        const imagesHtml = noteImages.length
+            ? `<div class="note-images">${noteImages.map((image, index) => {
+                    const src = escapeHtml(image.dataUrl || '');
+                    const captionText = image.name ? escapeHtml(image.name) : `Image ${index + 1}`;
+                    const caption = image.name ? `<figcaption>${captionText}</figcaption>` : '';
+                    return `<figure class="note-image-item"><img src="${src}" alt="${captionText}" loading="lazy">${caption}</figure>`;
+                }).join('')}</div>`
+            : '';
 
         card.className = `note-card ${isExpanded ? 'expanded' : 'collapsed'}`;
         card.dataset.noteId = note.id;
@@ -742,6 +1013,7 @@ function renderNotes() {
                 ${metaHtml}
                 ${tagsHtml}
                 <div class="note-content">${noteContent}</div>
+                ${imagesHtml}
                 <div class="note-actions">
                     <button onclick="openEditNoteModal('${note.id}')">✏️ Edit</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
