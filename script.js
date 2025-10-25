@@ -58,7 +58,8 @@ const elements = {
     toastContainer: document.getElementById('toast-container'),
     uploadImageBtn: document.getElementById('upload-image-btn'),
     imageUploadInput: document.getElementById('image-upload-input'),
-    noteEditorStatus: document.getElementById('note-editor-status')
+    noteEditorStatus: document.getElementById('note-editor-status'),
+    autoSaveStatus: document.getElementById('auto-save-status')
 };
 
 const SYNC_STATUS_META = {
@@ -67,6 +68,75 @@ const SYNC_STATUS_META = {
     offline: { icon: '⚠️', label: 'Offline', className: 'offline' },
     error: { icon: '❌', label: 'Error', className: 'error' }
 };
+
+// Auto-save state management
+let autoSaveTimeout = null;
+let modalAutoSaveNoteId = null;
+const inlineAutoSaveTimers = new WeakMap();
+const AUTO_SAVE_DELAY = 1500; // 1.5 seconds
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff
+
+// Debounce utility
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+        return timeout;
+    };
+}
+
+// Update auto-save status indicator
+function updateAutoSaveStatus(statusElement, state, message = '') {
+    if (!statusElement) return;
+    
+    statusElement.className = statusElement.className.replace(/\b(idle|saving|saved|error)\b/g, '');
+    statusElement.classList.add(state);
+    
+    const icon = statusElement.querySelector('.status-icon') || document.createElement('span');
+    icon.className = 'status-icon';
+    
+    const label = statusElement.querySelector('.status-label') || document.createElement('span');
+    label.className = 'status-label';
+    
+    switch (state) {
+        case 'idle':
+            statusElement.innerHTML = '';
+            break;
+        case 'saving':
+            icon.textContent = '🔄';
+            label.textContent = message || 'Saving...';
+            statusElement.innerHTML = '';
+            statusElement.appendChild(icon);
+            statusElement.appendChild(label);
+            break;
+        case 'saved':
+            icon.textContent = '✓';
+            label.textContent = message || 'All changes saved';
+            statusElement.innerHTML = '';
+            statusElement.appendChild(icon);
+            statusElement.appendChild(label);
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                if (statusElement.classList.contains('saved')) {
+                    updateAutoSaveStatus(statusElement, 'idle');
+                }
+            }, 3000);
+            break;
+        case 'error':
+            icon.textContent = '⚠️';
+            label.textContent = message || 'Save failed';
+            statusElement.innerHTML = '';
+            statusElement.appendChild(icon);
+            statusElement.appendChild(label);
+            break;
+    }
+}
 
 function init() {
     setupEventListeners();
@@ -150,7 +220,6 @@ function setupEventListeners() {
     elements.newNoteBtn.addEventListener('click', openNewNoteModal);
     elements.closeModal.addEventListener('click', closeNoteModal);
     elements.cancelNoteBtn.addEventListener('click', closeNoteModal);
-    elements.noteForm.addEventListener('submit', saveNote);
     elements.searchInput.addEventListener('input', renderNotes);
     elements.categoryFilter.addEventListener('change', renderNotes);
     elements.sortSelect.addEventListener('change', renderNotes);
@@ -171,6 +240,9 @@ function setupEventListeners() {
     if (elements.noteContentEditor) {
         elements.noteContentEditor.addEventListener('paste', handleEditorPaste);
     }
+
+    // Setup auto-save for modal editor
+    setupModalAutoSave();
 
     elements.noteModal.addEventListener('click', (e) => {
         if (e.target === elements.noteModal) {
@@ -434,51 +506,30 @@ function updateCategoryFilter() {
     }
 }
 
-function openNewNoteModal() {
-    currentNote = null;
-    elements.modalTitle.textContent = 'New Note';
-    elements.noteTitle.value = '';
-    if (elements.noteContentEditor) {
-        elements.noteContentEditor.innerHTML = '';
+// Setup auto-save for modal editor
+function setupModalAutoSave() {
+    const triggerAutoSave = debounce(() => {
+        if (elements.noteModal.classList.contains('open')) {
+            autoSaveModalNote();
+        }
+    }, AUTO_SAVE_DELAY);
+
+    if (elements.noteTitle) {
+        elements.noteTitle.addEventListener('input', triggerAutoSave);
     }
-    elements.noteCategory.value = '';
-    clearEditorStatus();
-    elements.noteModal.classList.add('open');
-    elements.noteTitle.focus();
-}
 
-function openEditNoteModal(noteId) {
-    const note = notes.find(n => n.id === noteId);
-    if (!note) return;
-
-    currentNote = note;
-    elements.modalTitle.textContent = 'Edit Note';
-    elements.noteTitle.value = note.title;
     if (elements.noteContentEditor) {
-        elements.noteContentEditor.innerHTML = note.content || '';
-        focusEditorAtEnd(elements.noteContentEditor);
+        elements.noteContentEditor.addEventListener('input', triggerAutoSave);
     }
-    elements.noteCategory.value = note.category || '';
-    clearEditorStatus();
-    elements.noteModal.classList.add('open');
-    elements.noteTitle.focus();
+
+    if (elements.noteCategory) {
+        elements.noteCategory.addEventListener('input', triggerAutoSave);
+    }
 }
 
-function closeNoteModal() {
-    elements.noteModal.classList.remove('open');
-    currentNote = null;
-    clearEditorStatus();
-}
-
-function closeArchivedModal() {
-    elements.archivedModal.classList.remove('open');
-}
-
-async function saveNote(e) {
-    e.preventDefault();
-
+// Auto-save modal note with retry logic
+async function autoSaveModalNote(retryCount = 0) {
     if (!db) {
-        showToast('Cloud sync not available', 'error');
         return;
     }
 
@@ -488,17 +539,8 @@ async function saveNote(e) {
     const sanitizedContent = sanitizeNoteContent(editorHtml);
     const contentHasValue = hasMeaningfulContent(sanitizedContent);
 
-    if (!title) {
-        showToast('Please provide a note title', 'error');
-        elements.noteTitle.focus();
-        return;
-    }
-
-    if (!contentHasValue) {
-        showToast('Add text or images to your note before saving', 'error');
-        if (elements.noteContentEditor) {
-            elements.noteContentEditor.focus();
-        }
+    // Don't auto-save if title is empty or content has no value
+    if (!title || !contentHasValue) {
         return;
     }
 
@@ -507,20 +549,21 @@ async function saveNote(e) {
     }
 
     try {
+        updateAutoSaveStatus(elements.autoSaveStatus, 'saving');
         updateSyncStatus('syncing');
 
-        if (currentNote) {
+        if (modalAutoSaveNoteId || currentNote) {
             // Update existing note
-            await db.collection('notes').doc(currentNote.id).update({
+            const noteId = modalAutoSaveNoteId || currentNote.id;
+            await db.collection('notes').doc(noteId).update({
                 title,
                 content: sanitizedContent,
                 category,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            showToast('Note updated successfully! ✅');
         } else {
             // Create new note
-            await db.collection('notes').add({
+            const docRef = await db.collection('notes').add({
                 title,
                 content: sanitizedContent,
                 category,
@@ -530,15 +573,75 @@ async function saveNote(e) {
                 isPinned: false,
                 isArchived: false
             });
-            showToast('Note created successfully! 🎉');
+            // Store the note ID for subsequent auto-saves
+            modalAutoSaveNoteId = docRef.id;
+            // Update modal title to indicate editing
+            elements.modalTitle.textContent = 'Edit Note';
         }
 
-        closeNoteModal();
+        updateAutoSaveStatus(elements.autoSaveStatus, 'saved');
     } catch (error) {
-        console.error('Save note error:', error);
-        showToast('Failed to save note: ' + error.message, 'error');
-        updateSyncStatus('error');
+        console.error('Auto-save error:', error);
+        
+        // Retry logic with exponential backoff
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+            const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+            updateAutoSaveStatus(elements.autoSaveStatus, 'error', `Retrying in ${delay / 1000}s...`);
+            
+            setTimeout(() => {
+                autoSaveModalNote(retryCount + 1);
+            }, delay);
+        } else {
+            updateAutoSaveStatus(elements.autoSaveStatus, 'error', 'Save failed. Check connection.');
+            updateSyncStatus('error');
+        }
     }
+}
+
+function openNewNoteModal() {
+    currentNote = null;
+    modalAutoSaveNoteId = null; // Reset auto-save note ID
+    elements.modalTitle.textContent = 'New Note';
+    elements.noteTitle.value = '';
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.innerHTML = '';
+    }
+    elements.noteCategory.value = '';
+    clearEditorStatus();
+    updateAutoSaveStatus(elements.autoSaveStatus, 'idle');
+    elements.noteModal.classList.add('open');
+    elements.noteTitle.focus();
+}
+
+function openEditNoteModal(noteId) {
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    currentNote = note;
+    modalAutoSaveNoteId = note.id; // Set for auto-save
+    elements.modalTitle.textContent = 'Edit Note';
+    elements.noteTitle.value = note.title;
+    if (elements.noteContentEditor) {
+        elements.noteContentEditor.innerHTML = note.content || '';
+        focusEditorAtEnd(elements.noteContentEditor);
+    }
+    elements.noteCategory.value = note.category || '';
+    clearEditorStatus();
+    updateAutoSaveStatus(elements.autoSaveStatus, 'idle');
+    elements.noteModal.classList.add('open');
+    elements.noteTitle.focus();
+}
+
+function closeNoteModal() {
+    elements.noteModal.classList.remove('open');
+    currentNote = null;
+    modalAutoSaveNoteId = null;
+    clearEditorStatus();
+    updateAutoSaveStatus(elements.autoSaveStatus, 'idle');
+}
+
+function closeArchivedModal() {
+    elements.archivedModal.classList.remove('open');
 }
 
 async function deleteNote(noteId) {
@@ -811,6 +914,7 @@ function renderNotes() {
                         <input type="file" class="inline-image-upload-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" multiple hidden>
                         <span class="note-editor-hint">Tip: Paste images with Ctrl+V or Cmd+V</span>
                         <span class="inline-editor-status note-editor-status" aria-live="polite"></span>
+                        <span class="inline-auto-save-status auto-save-status idle" aria-live="polite"></span>
                     </div>
                     <div class="note-content inline-note-editor" contenteditable="${isExpanded ? 'true' : 'false'}" data-placeholder="Write your note here..."></div>
                 </div>
@@ -1305,7 +1409,7 @@ function setupInlineEditor(card, note, isExpanded) {
     const titleInput = card.querySelector('.inline-title-input');
     const categoryInput = card.querySelector('.inline-category-input');
 
-    if (!editor || !toolbar || !saveBtn) {
+    if (!editor || !toolbar) {
         return;
     }
 
@@ -1325,11 +1429,16 @@ function setupInlineEditor(card, note, isExpanded) {
         handleInlineEditorPaste(e, editor, card);
     });
 
-    saveBtn.addEventListener('click', () => {
-        saveInlineNote(note.id, card);
-    });
+    // Setup auto-save for inline editor
+    const triggerInlineAutoSave = debounce(() => {
+        autoSaveInlineNote(note.id, card);
+    }, AUTO_SAVE_DELAY);
 
-    if (titleInput && editor) {
+    editor.addEventListener('input', triggerInlineAutoSave);
+    
+    if (titleInput) {
+        titleInput.addEventListener('input', triggerInlineAutoSave);
+        
         titleInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -1338,7 +1447,9 @@ function setupInlineEditor(card, note, isExpanded) {
         });
     }
 
-    if (categoryInput && editor) {
+    if (categoryInput) {
+        categoryInput.addEventListener('input', triggerInlineAutoSave);
+        
         categoryInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -1404,6 +1515,116 @@ function setInlineEditMode(card, note, isEditing, options = {}) {
     }
 
     card.classList.toggle('is-inline-editing', isEditing);
+}
+
+// Auto-save inline note with retry logic
+async function autoSaveInlineNote(noteId, card, retryCount = 0) {
+    if (!db) {
+        return;
+    }
+
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const editor = card.querySelector('.inline-note-editor');
+    const titleInput = card.querySelector('.inline-title-input');
+    const categoryInput = card.querySelector('.inline-category-input');
+    const autoSaveStatus = card.querySelector('.inline-auto-save-status');
+    
+    if (!editor) return;
+
+    const title = (titleInput ? titleInput.value : (note.title || '')).trim();
+    const category = categoryInput ? categoryInput.value.trim() : (note.category || '');
+    const editorHtml = editor.innerHTML;
+    const sanitizedContent = sanitizeNoteContent(editorHtml);
+    const contentHasValue = hasMeaningfulContent(sanitizedContent);
+
+    // Don't auto-save if title is empty or content has no value
+    if (!title || !contentHasValue) {
+        return;
+    }
+
+    editor.innerHTML = sanitizedContent;
+
+    try {
+        updateAutoSaveStatus(autoSaveStatus, 'saving');
+        updateSyncStatus('syncing');
+
+        await db.collection('notes').doc(noteId).update({
+            title,
+            content: sanitizedContent,
+            category,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        if (titleInput) {
+            titleInput.value = title;
+        }
+        if (categoryInput) {
+            categoryInput.value = category;
+        }
+
+        const titleDisplay = card.querySelector('.note-title');
+        if (titleDisplay) {
+            const safeTitle = escapeHtml(title);
+            titleDisplay.innerHTML = note.isPinned ? `📌 ${safeTitle}` : safeTitle;
+        }
+
+        const tagChips = [];
+        if (category) {
+            tagChips.push(`<span class="note-tag note-tag--category">${escapeHtml(category)}</span>`);
+        }
+        if (Array.isArray(note.tags)) {
+            note.tags.filter(Boolean).forEach(tag => {
+                tagChips.push(`<span class="note-tag">${escapeHtml(tag)}</span>`);
+            });
+        }
+
+        let tagsContainer = card.querySelector('.note-tags');
+        const categoryField = card.querySelector('.inline-category-field');
+        const contentWrapper = card.querySelector('.note-content-wrapper');
+
+        if (tagChips.length) {
+            if (!tagsContainer) {
+                tagsContainer = document.createElement('div');
+                tagsContainer.className = 'note-tags';
+                if (categoryField) {
+                    categoryField.insertAdjacentElement('beforebegin', tagsContainer);
+                } else if (contentWrapper) {
+                    contentWrapper.insertAdjacentElement('beforebegin', tagsContainer);
+                }
+            }
+            tagsContainer.innerHTML = tagChips.join('');
+        } else if (tagsContainer) {
+            tagsContainer.remove();
+        }
+
+        note.title = title;
+        note.category = category;
+        note.content = sanitizedContent;
+        note.plainContent = extractPlainTextFromHtml(sanitizedContent);
+        note.updatedAt = new Date();
+
+        updateCategories();
+        updateCategoryFilter();
+
+        updateAutoSaveStatus(autoSaveStatus, 'saved');
+    } catch (error) {
+        console.error('Auto-save inline note error:', error);
+        
+        // Retry logic with exponential backoff
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+            const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+            updateAutoSaveStatus(autoSaveStatus, 'error', `Retrying in ${delay / 1000}s...`);
+            
+            setTimeout(() => {
+                autoSaveInlineNote(noteId, card, retryCount + 1);
+            }, delay);
+        } else {
+            updateAutoSaveStatus(autoSaveStatus, 'error', 'Save failed');
+            updateSyncStatus('error');
+        }
+    }
 }
 
 async function saveInlineNote(noteId, card) {
