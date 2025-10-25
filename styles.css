@@ -675,14 +675,6 @@ body {
     min-height: 18px;
 }
 
-.inline-save-btn {
-    font-weight: 700;
-}
-
-.inline-save-btn:hover {
-    background: rgba(34, 197, 94, 0.18) !important;
-}
-
 .inline-field-row {
     display: flex;
     align-items: center;
