@@ -896,6 +896,102 @@ body {
     flex-wrap: wrap;
 }
 
+.setup-content {
+    text-align: left;
+    padding: 24px;
+}
+
+.setup-content h2 {
+    margin: 0 0 16px 0;
+    font-size: 24px;
+    color: var(--text-color);
+    text-align: center;
+}
+
+.setup-content > p {
+    color: var(--muted-text-color);
+    margin-bottom: 24px;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.setup-steps {
+    background: rgba(58, 134, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.setup-steps h3 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: var(--text-color);
+}
+
+.setup-steps ol {
+    margin: 0;
+    padding-left: 24px;
+    color: var(--text-color);
+}
+
+.setup-steps li {
+    margin-bottom: 16px;
+    line-height: 1.6;
+}
+
+.setup-steps strong {
+    color: var(--primary-color);
+}
+
+.setup-steps ul {
+    margin: 8px 0 0 0;
+    padding-left: 24px;
+}
+
+.setup-steps code {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: var(--primary-color);
+}
+
+.setup-steps a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.setup-steps a:hover {
+    text-decoration: underline;
+}
+
+.setup-hint {
+    color: var(--muted-text-color);
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.setup-hint a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.setup-hint a:hover {
+    text-decoration: underline;
+}
+
+.setup-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 @keyframes slideUp {
     from {
         transform: translateY(22px);

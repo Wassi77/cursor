@@ -130,13 +130,56 @@
 
     <div id="toast-container" class="toast-container"></div>
 
+    <div id="setup-modal" class="modal">
+        <div class="modal-content">
+            <div class="setup-content">
+                <h2>⚙️ Firebase Setup Required</h2>
+                <p>To enable cloud synchronization of your notes, you need to set up Firebase Firestore.</p>
+                
+                <div class="setup-steps">
+                    <h3>Quick Setup Steps:</h3>
+                    <ol>
+                        <li><strong>Copy the config file:</strong>
+                            <code>cp firebase-config.example.js firebase-config.js</code>
+                        </li>
+                        <li><strong>Get Firebase credentials:</strong>
+                            <ul>
+                                <li>Go to <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a></li>
+                                <li>Create a new project or select an existing one</li>
+                                <li>Register a web app and copy the configuration</li>
+                            </ul>
+                        </li>
+                        <li><strong>Update firebase-config.js:</strong>
+                            <p>Replace the placeholder values with your Firebase project credentials</p>
+                        </li>
+                        <li><strong>Enable required services:</strong>
+                            <ul>
+                                <li>Enable Firestore Database (start in production mode)</li>
+                                <li>Enable Anonymous Authentication</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+                
+                <p class="setup-hint">
+                    See <a href="FIREBASE_SETUP.md" target="_blank">FIREBASE_SETUP.md</a> for detailed instructions
+                </p>
+                
+                <div class="setup-actions">
+                    <button id="check-config-btn" class="btn btn-primary">✓ I've Set Up Firebase</button>
+                    <button id="use-offline-btn" class="btn btn-secondary">📝 Use Offline Only</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
     <!-- Firebase Configuration (optional - only if firebase-config.js exists) -->
-    <script src="firebase-config.js" onerror="console.warn('Firebase config not found. Please create firebase-config.js from firebase-config.example.js')"></script>
+    <script src="firebase-config.js" onerror="window.firebaseConfigNotFound=true;"></script>
     
     <script src="script.js"></script>
 </body>

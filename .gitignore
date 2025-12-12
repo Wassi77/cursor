@@ -24,3 +24,4 @@ coverage/
 
 # Firebase
 firebase-config.js
+firebase-config.*.js
