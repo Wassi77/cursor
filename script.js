@@ -3,6 +3,7 @@ let db = null;
 let auth = null;
 let unsubscribeListener = null;
 let offlineNotified = false;
+let firebaseConfigAvailable = false;
 
 // Use password from firebase config or fallback to default
 const PASSWORD_HASH = window.firestoreAccessPassword || 'notes123';
@@ -170,64 +171,97 @@ function updateSyncStatus(status = 'synced') {
 }
 
 async function initializeFirebase() {
-    if (!window.firebase || !window.firebaseConfig) {
-        showToast('Firebase configuration not found. Please set up firebase-config.js', 'error');
-        updateSyncStatus('error');
-        return false;
-    }
+     if (!window.firebase) {
+         console.error('Firebase SDK not loaded. Check that Firebase scripts are properly included.');
+         updateSyncStatus('error');
+         return false;
+     }
 
-    try {
-        updateSyncStatus('syncing');
-        
-        if (!firebase.apps.length) {
-            firebase.initializeApp(window.firebaseConfig);
-        }
+     if (!window.firebaseConfig) {
+         console.error('Firebase configuration not found. Please set up firebase-config.js');
+         updateSyncStatus('error');
+         return false;
+     }
 
-        const firestoreInstance = firebase.firestore();
-        auth = firebase.auth();
+     if (!window.firebaseConfig.apiKey || !window.firebaseConfig.projectId) {
+         console.error('Firebase configuration is incomplete. Missing required fields.');
+         updateSyncStatus('error');
+         return false;
+     }
 
-        // Enable offline persistence
-        try {
-            await firestoreInstance.enablePersistence({ synchronizeTabs: true });
-        } catch (err) {
-            if (err.code === 'failed-precondition') {
-                console.warn('Multiple tabs open, persistence enabled in one tab only.');
-            } else if (err.code === 'unimplemented') {
-                console.warn('Browser does not support offline persistence.');
-            }
-        }
+     try {
+         updateSyncStatus('syncing');
 
-        db = firestoreInstance;
+         if (!firebase.apps.length) {
+             firebase.initializeApp(window.firebaseConfig);
+         }
 
-        // Sign in anonymously for backend access
-        if (!auth.currentUser) {
-            await auth.signInAnonymously();
-        }
+         const firestoreInstance = firebase.firestore();
+         auth = firebase.auth();
 
-        return true;
-    } catch (error) {
-        console.error('Firebase initialization error:', error);
-        showToast('Failed to initialize cloud sync: ' + error.message, 'error');
-        updateSyncStatus('error');
-        return false;
-    }
+         // Enable offline persistence
+         try {
+             await firestoreInstance.enablePersistence({ synchronizeTabs: true });
+         } catch (err) {
+             if (err.code === 'failed-precondition') {
+                 console.warn('Multiple tabs open, persistence enabled in one tab only.');
+             } else if (err.code === 'unimplemented') {
+                 console.warn('Browser does not support offline persistence.');
+             }
+         }
+
+         db = firestoreInstance;
+
+         // Sign in anonymously for backend access
+         if (!auth.currentUser) {
+             await auth.signInAnonymously();
+         }
+
+         console.log('Firebase initialized successfully with project:', window.firebaseConfig.projectId);
+         return true;
+     } catch (error) {
+         console.error('Firebase initialization error:', error);
+         showToast('Failed to initialize cloud sync: ' + error.message, 'error');
+         updateSyncStatus('error');
+         return false;
+     }
 }
 
 function setupEventListeners() {
-    elements.loginForm.addEventListener('submit', handleLogin);
-    elements.logoutBtn.addEventListener('click', handleLogout);
-    elements.themeToggle.addEventListener('click', toggleTheme);
-    elements.newNoteBtn.addEventListener('click', openNewNoteModal);
-    elements.closeModal.addEventListener('click', closeNoteModal);
-    elements.cancelNoteBtn.addEventListener('click', closeNoteModal);
-    elements.searchInput.addEventListener('input', renderNotes);
-    elements.categoryFilter.addEventListener('change', renderNotes);
-    elements.sortSelect.addEventListener('change', renderNotes);
-    elements.exportAllBtn.addEventListener('click', exportAllNotes);
-    elements.showArchivedBtn.addEventListener('click', showArchivedNotes);
-    elements.closeArchivedModal.addEventListener('click', closeArchivedModal);
-    elements.migrateYesBtn.addEventListener('click', handleMigrationYes);
-    elements.migrateSkipBtn.addEventListener('click', handleMigrationSkip);
+     elements.loginForm.addEventListener('submit', handleLogin);
+     elements.logoutBtn.addEventListener('click', handleLogout);
+     elements.themeToggle.addEventListener('click', toggleTheme);
+     elements.newNoteBtn.addEventListener('click', openNewNoteModal);
+     elements.closeModal.addEventListener('click', closeNoteModal);
+     elements.cancelNoteBtn.addEventListener('click', closeNoteModal);
+     elements.searchInput.addEventListener('input', renderNotes);
+     elements.categoryFilter.addEventListener('change', renderNotes);
+     elements.sortSelect.addEventListener('change', renderNotes);
+     elements.exportAllBtn.addEventListener('click', exportAllNotes);
+     elements.showArchivedBtn.addEventListener('click', showArchivedNotes);
+     elements.closeArchivedModal.addEventListener('click', closeArchivedModal);
+     elements.migrateYesBtn.addEventListener('click', handleMigrationYes);
+     elements.migrateSkipBtn.addEventListener('click', handleMigrationSkip);
+
+     // Setup modal event listeners
+     const setupModal = document.getElementById('setup-modal');
+     const checkConfigBtn = document.getElementById('check-config-btn');
+     const useOfflineBtn = document.getElementById('use-offline-btn');
+
+     if (checkConfigBtn) {
+         checkConfigBtn.addEventListener('click', () => {
+             location.reload();
+         });
+     }
+
+     if (useOfflineBtn) {
+         useOfflineBtn.addEventListener('click', () => {
+             if (setupModal) {
+                 setupModal.classList.remove('open');
+             }
+             showToast('Cloud sync is disabled. Your notes are stored locally only.', 'info');
+         });
+     }
 
     if (elements.uploadImageBtn && elements.imageUploadInput) {
         elements.uploadImageBtn.addEventListener('click', () => {
@@ -258,12 +292,15 @@ function setupEventListeners() {
 }
 
 function checkAuth() {
-    const isAuthenticated = localStorage.getItem('isAuthenticated');
-    if (isAuthenticated === 'true') {
-        showApp();
-    } else {
-        showLogin();
-    }
+     // Check if Firebase config is available
+     firebaseConfigAvailable = !window.firebaseConfigNotFound && window.firebaseConfig && window.firebaseConfig.apiKey;
+
+     const isAuthenticated = localStorage.getItem('isAuthenticated');
+     if (isAuthenticated === 'true') {
+         showApp();
+     } else {
+         showLogin();
+     }
 }
 
 async function handleLogin(e) {
@@ -316,29 +353,34 @@ function showLogin() {
 }
 
 async function showApp() {
-    elements.loginScreen.style.display = 'none';
-    elements.app.style.display = 'block';
-    
-    // Initialize Firebase and start sync
-    const initialized = await initializeFirebase();
-    
-    if (initialized) {
-        // Check for migration
-        await checkForMigration();
-        
-        // Start listening to Firestore
-        startRealtimeSync();
-    } else {
-        // Show error state
-        elements.notesContainer.innerHTML = `
-            <div class="empty-state">
-                <p class="empty-icon">⚠️</p>
-                <h2>Cloud Sync Unavailable</h2>
-                <p>Please configure Firebase to enable cloud synchronization.</p>
-                <p style="font-size: 14px; color: var(--muted-text-color);">See firebase-config.example.js for instructions.</p>
-            </div>
-        `;
-    }
+      elements.loginScreen.style.display = 'none';
+      elements.app.style.display = 'block';
+
+      // Check if Firebase config is available
+      if (!firebaseConfigAvailable) {
+          const setupModal = document.getElementById('setup-modal');
+          if (setupModal) {
+              setupModal.classList.add('open');
+          }
+          // Load notes from localStorage for offline-only mode
+          loadLocalNotes();
+          return;
+      }
+
+      // Initialize Firebase and start sync
+      const initialized = await initializeFirebase();
+
+      if (initialized) {
+          // Check for migration
+          await checkForMigration();
+
+          // Start listening to Firestore
+          startRealtimeSync();
+      } else {
+          // Fall back to local storage if Firebase fails
+          console.warn('Firebase initialization failed, falling back to local storage');
+          loadLocalNotes();
+      }
 }
 
 async function checkForMigration() {
@@ -401,12 +443,78 @@ async function handleMigrationYes() {
 }
 
 function handleMigrationSkip() {
-    elements.migrationModal.classList.remove('open');
-    showToast('Migration skipped. Local notes preserved.');
+     elements.migrationModal.classList.remove('open');
+     showToast('Migration skipped. Local notes preserved.');
+}
+
+function loadLocalNotes() {
+     const localNotesJson = localStorage.getItem('notes');
+     if (localNotesJson) {
+         try {
+             notes = JSON.parse(localNotesJson);
+             updateCategories();
+             updateCategoryFilter();
+             renderNotes();
+             updateSyncStatus('offline');
+         } catch (error) {
+             console.error('Error loading local notes:', error);
+             notes = [];
+             renderNotes();
+         }
+     } else {
+         notes = [];
+         renderNotes();
+     }
+}
+
+function saveNoteToLocalStorage(title, content, category) {
+     const now = new Date();
+     const note = modalAutoSaveNoteId ? 
+         notes.find(n => n.id === modalAutoSaveNoteId) :
+         currentNote;
+     
+     if (note) {
+         // Update existing note
+         note.title = title;
+         note.content = content;
+         note.category = category;
+         note.updatedAt = now;
+         note.plainContent = extractPlainTextFromHtml(content);
+     } else {
+         // Create new note
+         const newNote = {
+             id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+             title,
+             content,
+             plainContent: extractPlainTextFromHtml(content),
+             category,
+             tags: [],
+             createdAt: now,
+             updatedAt: now,
+             isPinned: false,
+             isArchived: false
+         };
+         notes.unshift(newNote);
+         modalAutoSaveNoteId = newNote.id;
+         
+         if (elements.modalTitle) {
+             elements.modalTitle.textContent = 'Edit Note';
+         }
+     }
+     
+     // Save to localStorage
+     try {
+         localStorage.setItem('notes', JSON.stringify(notes));
+         updateCategories();
+         updateCategoryFilter();
+         renderNotes();
+     } catch (error) {
+         console.error('Error saving note to localStorage:', error);
+     }
 }
 
 function startRealtimeSync() {
-    if (!db) return;
+     if (!db) return;
 
     if (unsubscribeListener) {
         unsubscribeListener();
@@ -529,73 +637,75 @@ function setupModalAutoSave() {
 
 // Auto-save modal note with retry logic
 async function autoSaveModalNote(retryCount = 0) {
-    if (!db) {
-        return;
-    }
+     const title = elements.noteTitle.value.trim();
+     const category = elements.noteCategory.value.trim();
+     const editorHtml = elements.noteContentEditor ? elements.noteContentEditor.innerHTML : '';
+     const sanitizedContent = sanitizeNoteContent(editorHtml);
+     const contentHasValue = hasMeaningfulContent(sanitizedContent);
 
-    const title = elements.noteTitle.value.trim();
-    const category = elements.noteCategory.value.trim();
-    const editorHtml = elements.noteContentEditor ? elements.noteContentEditor.innerHTML : '';
-    const sanitizedContent = sanitizeNoteContent(editorHtml);
-    const contentHasValue = hasMeaningfulContent(sanitizedContent);
+     // Don't auto-save if title is empty or content has no value
+     if (!title || !contentHasValue) {
+         return;
+     }
 
-    // Don't auto-save if title is empty or content has no value
-    if (!title || !contentHasValue) {
-        return;
-    }
+     if (elements.noteContentEditor) {
+         elements.noteContentEditor.innerHTML = sanitizedContent;
+     }
 
-    if (elements.noteContentEditor) {
-        elements.noteContentEditor.innerHTML = sanitizedContent;
-    }
+     try {
+         updateAutoSaveStatus(elements.autoSaveStatus, 'saving');
+         updateSyncStatus('syncing');
 
-    try {
-        updateAutoSaveStatus(elements.autoSaveStatus, 'saving');
-        updateSyncStatus('syncing');
+         // If Firebase is available, use it; otherwise fall back to local storage
+         if (db && firebaseConfigAvailable) {
+             if (modalAutoSaveNoteId || currentNote) {
+                 // Update existing note
+                 const noteId = modalAutoSaveNoteId || currentNote.id;
+                 await db.collection('notes').doc(noteId).update({
+                     title,
+                     content: sanitizedContent,
+                     category,
+                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                 });
+             } else {
+                 // Create new note
+                 const docRef = await db.collection('notes').add({
+                     title,
+                     content: sanitizedContent,
+                     category,
+                     tags: [],
+                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                     isPinned: false,
+                     isArchived: false
+                 });
+                 // Store the note ID for subsequent auto-saves
+                 modalAutoSaveNoteId = docRef.id;
+                 // Update modal title to indicate editing
+                 elements.modalTitle.textContent = 'Edit Note';
+             }
+         } else {
+             // Use local storage fallback
+             saveNoteToLocalStorage(title, sanitizedContent, category);
+         }
 
-        if (modalAutoSaveNoteId || currentNote) {
-            // Update existing note
-            const noteId = modalAutoSaveNoteId || currentNote.id;
-            await db.collection('notes').doc(noteId).update({
-                title,
-                content: sanitizedContent,
-                category,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } else {
-            // Create new note
-            const docRef = await db.collection('notes').add({
-                title,
-                content: sanitizedContent,
-                category,
-                tags: [],
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                isPinned: false,
-                isArchived: false
-            });
-            // Store the note ID for subsequent auto-saves
-            modalAutoSaveNoteId = docRef.id;
-            // Update modal title to indicate editing
-            elements.modalTitle.textContent = 'Edit Note';
-        }
+         updateAutoSaveStatus(elements.autoSaveStatus, 'saved');
+     } catch (error) {
+         console.error('Auto-save error:', error);
 
-        updateAutoSaveStatus(elements.autoSaveStatus, 'saved');
-    } catch (error) {
-        console.error('Auto-save error:', error);
-        
-        // Retry logic with exponential backoff
-        if (retryCount < MAX_RETRY_ATTEMPTS) {
-            const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
-            updateAutoSaveStatus(elements.autoSaveStatus, 'error', `Retrying in ${delay / 1000}s...`);
-            
-            setTimeout(() => {
-                autoSaveModalNote(retryCount + 1);
-            }, delay);
-        } else {
-            updateAutoSaveStatus(elements.autoSaveStatus, 'error', 'Save failed. Check connection.');
-            updateSyncStatus('error');
-        }
-    }
+         // Retry logic with exponential backoff
+         if (retryCount < MAX_RETRY_ATTEMPTS) {
+             const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+             updateAutoSaveStatus(elements.autoSaveStatus, 'error', `Retrying in ${delay / 1000}s...`);
+
+             setTimeout(() => {
+                 autoSaveModalNote(retryCount + 1);
+             }, delay);
+         } else {
+             updateAutoSaveStatus(elements.autoSaveStatus, 'error', 'Save failed. Check connection.');
+             updateSyncStatus('error');
+         }
+     }
 }
 
 function openNewNoteModal() {
