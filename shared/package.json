@@ -2,8 +2,8 @@
   "name": "@movie-mimic/shared",
   "version": "1.0.0",
   "description": "Shared types, constants, and utilities for Movie Mimic",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
