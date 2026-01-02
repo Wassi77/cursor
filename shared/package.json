@@ -2,9 +2,10 @@
   "name": "@movie-mimic/shared",
   "version": "1.0.0",
   "description": "Shared types, constants, and utilities for Movie Mimic",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "prepack": "npm run build",
     "build": "tsc",
     "clean": "rm -rf dist",
     "lint": "eslint . --ext .ts",
