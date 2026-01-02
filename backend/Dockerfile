@@ -5,17 +5,27 @@ RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy root package files
+COPY package.json ./
 
-# Install dependencies
+# Copy shared package (types and constants)
+COPY shared/package.json ./shared/
+COPY shared/tsconfig.json ./shared/
+COPY shared/src ./shared/src/
+
+# Copy backend package files
+COPY backend/package.json ./backend/
+
+# Install dependencies (this will also install shared package)
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy backend source
+COPY backend/tsconfig.json ./backend/
+COPY backend/src ./backend/src/
 
-# Build TypeScript
-RUN npm run build
+# Build shared and backend
+RUN cd shared && npm run build
+RUN cd backend && npm run build
 
 # Create necessary directories
 RUN mkdir -p data uploads/videos uploads/subtitles uploads/recordings uploads/exports uploads/thumbnails uploads/temp logs
@@ -23,5 +33,5 @@ RUN mkdir -p data uploads/videos uploads/subtitles uploads/recordings uploads/ex
 # Expose port
 EXPOSE 5000
 
-# Start server
-CMD ["npm", "run", "start"]
+# Start backend
+CMD ["node", "backend/dist/index.js"]
