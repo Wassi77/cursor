@@ -1,314 +1,595 @@
 # Deployment Guide
 
-This guide covers deploying the Personal Notes app with Firebase Firestore integration.
+Guide for deploying Movie Mimic to production.
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Deployment Options](#deployment-options)
+3. [Docker Deployment](#docker-deployment)
+4. [Manual Deployment](#manual-deployment)
+5. [Cloud Deployment](#cloud-deployment)
+6. [Environment Configuration](#environment-configuration)
+7. [SSL/HTTPS Setup](#sslhttps-setup)
+8. [Monitoring & Maintenance](#monitoring--maintenance)
 
 ## Prerequisites
 
-Before deploying, ensure you have:
-
-1. ✅ Completed Firebase setup (see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md))
-2. ✅ Created `firebase-config.js` with your Firebase credentials
-3. ✅ Tested the app locally and verified cloud sync works
-4. ✅ Changed the default password if desired
-
-## Important: Security Before Deployment
-
-⚠️ **Do NOT commit `firebase-config.js` to public repositories!**
-
-The `.gitignore` file already includes `firebase-config.js` to prevent accidental commits. However, when deploying, you'll need to handle the configuration differently.
-
-### Option 1: Private Deployment (Recommended)
-
-Deploy to a private/password-protected environment where only you can access the app.
-
-### Option 2: Environment Variables (For hosting platforms that support them)
-
-Some platforms allow you to set environment variables that can be injected into your app at build time. However, since this is a static app with no build step, you'll need to configure Firebase directly on the server or use platform-specific features.
+- Domain name
+- Server with at least:
+  - 2 CPU cores
+  - 4GB RAM
+  - 50GB disk space (for videos and exports)
+- FFmpeg installed
+- SSL certificate (for HTTPS)
 
 ## Deployment Options
 
-### Option A: Netlify Deployment
+### Option 1: Docker (Recommended)
 
-#### Method 1: Manual Deployment (Simplest)
+Easiest deployment method with containerization.
 
-1. Create `firebase-config.js` locally with your credentials
+### Option 2: Manual Deployment
 
-2. Build/prepare your files for deployment (no build step needed for this app)
+Deploy services manually on server.
 
-3. Go to [Netlify](https://www.netlify.com) and log in
+### Option 3: Cloud Services
 
-4. Drag and drop your entire project folder to Netlify
+Deploy to cloud providers (AWS, GCP, Azure).
 
-5. Your site will be deployed at a unique URL like `https://your-site-name.netlify.app`
+## Docker Deployment
 
-⚠️ **Security Note**: With manual deployment, your `firebase-config.js` will be included and visible to anyone who accesses your site's source code. This is acceptable for personal use, but be aware that your Firebase API keys will be publicly visible (though they're protected by Firebase security rules).
+### 1. Prepare Server
 
-#### Method 2: Git-based Deployment
+```bash
+# Update system
+sudo apt-get update
+sudo apt-get upgrade -y
 
-1. **Do NOT commit `firebase-config.js`** to your repository
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
 
-2. Push your code to GitHub (without `firebase-config.js`)
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-3. In Netlify:
-   - Connect your GitHub repository
-   - Add a build command: `echo 'window.firebaseConfig = {...}' > firebase-config.js`
-   - Or manually create `firebase-config.js` as a Netlify snippet
-
-4. Use Netlify's **Snippet Injection** feature:
-   - Go to Site Settings > Build & Deploy > Post processing > Snippet injection
-   - Add a script snippet with your Firebase configuration
-   - Inject it into the `<head>` before `</head>`
-
-**Example snippet:**
-```html
-<script>
-window.firebaseConfig = {
-    apiKey: "your-api-key",
-    authDomain: "your-project.firebaseapp.com",
-    projectId: "your-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "your-sender-id",
-    appId: "your-app-id"
-};
-window.firestoreAccessPassword = "your-password";
-</script>
+# Verify installations
+docker --version
+docker-compose --version
 ```
 
-#### Method 3: Netlify Environment Variables + Build Script
+### 2. Clone Repository
 
-1. Set up environment variables in Netlify:
-   - Go to Site Settings > Build & Deploy > Environment
-   - Add variables: `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, etc.
-
-2. Create a `netlify.toml` build configuration:
-
-```toml
-[build]
-  command = "node generate-config.js"
-  publish = "."
-
-[build.environment]
-  NODE_VERSION = "18"
+```bash
+git clone <repository-url>
+cd movie-mimic
 ```
 
-3. Create `generate-config.js`:
+### 3. Configure Environment
 
+```bash
+cp .env.example .env
+nano .env
+```
+
+Update production settings:
+```bash
+NODE_ENV=production
+PORT=5000
+CORS_ORIGIN=https://yourdomain.com
+LOG_LEVEL=info
+```
+
+### 4. Build and Deploy
+
+```bash
+# Build production images
+docker-compose build
+
+# Start services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+```
+
+### 5. Setup Reverse Proxy (Nginx)
+
+Install Nginx:
+```bash
+sudo apt-get install nginx -y
+```
+
+Configure `/etc/nginx/sites-available/movie-mimic`:
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /api {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+Enable site:
+```bash
+sudo ln -s /etc/nginx/sites-available/movie-mimic /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### 6. Setup SSL with Let's Encrypt
+
+```bash
+# Install Certbot
+sudo apt-get install certbot python3-certbot-nginx -y
+
+# Get certificate
+sudo certbot --nginx -d yourdomain.com
+
+# Auto-renewal (already configured)
+sudo certbot renew --dry-run
+```
+
+### 7. Docker Management Commands
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Restart services
+docker-compose restart
+
+# Update application
+git pull
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Backup data
+docker exec backend cat data/movie-mimic.sqlite > backup_$(date +%Y%m%d).sqlite
+
+# Stop services
+docker-compose down
+```
+
+## Manual Deployment
+
+### 1. Install Dependencies
+
+```bash
+# Update system
+sudo apt-get update
+sudo apt-get upgrade -y
+
+# Install Node.js
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install FFmpeg
+sudo apt-get install ffmpeg -y
+
+# Install PM2 (process manager)
+sudo npm install -g pm2
+```
+
+### 2. Clone and Setup
+
+```bash
+git clone <repository-url>
+cd movie-mimic
+
+# Install dependencies
+npm install --production
+cd frontend && npm install --production
+cd ..
+
+# Build shared package
+cd shared && npm run build && cd ..
+
+# Build backend
+cd backend && npm run build && cd ..
+
+# Build frontend
+cd frontend && npm run build && cd ..
+```
+
+### 3. Configure Environment
+
+```bash
+nano .env
+```
+
+Set production values.
+
+### 4. Start Services with PM2
+
+Backend ecosystem file `ecosystem.config.js`:
 ```javascript
-const fs = require('fs');
-
-const config = `
-const firebaseConfig = {
-    apiKey: "${process.env.FIREBASE_API_KEY}",
-    authDomain: "${process.env.FIREBASE_AUTH_DOMAIN}",
-    projectId: "${process.env.FIREBASE_PROJECT_ID}",
-    storageBucket: "${process.env.FIREBASE_STORAGE_BUCKET}",
-    messagingSenderId: "${process.env.FIREBASE_MESSAGING_SENDER_ID}",
-    appId: "${process.env.FIREBASE_APP_ID}"
+module.exports = {
+  apps: [
+    {
+      name: 'movie-mimic-backend',
+      cwd: '/path/to/movie-mimic/backend',
+      script: 'dist/index.js',
+      instances: 2,
+      exec_mode: 'cluster',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 5000,
+      },
+    },
+  ],
 };
-window.firestoreAccessPassword = "${process.env.FIRESTORE_ACCESS_PASSWORD}";
-window.firebaseConfig = firebaseConfig;
-`;
-
-fs.writeFileSync('firebase-config.js', config);
-console.log('Firebase config generated successfully');
 ```
 
-4. Deploy via Git as usual
-
-### Option B: Firebase Hosting
-
-Deploy directly to Firebase Hosting for a fully integrated solution:
-
-1. Install Firebase CLI:
-   ```bash
-   npm install -g firebase-tools
-   ```
-
-2. Login to Firebase:
-   ```bash
-   firebase login
-   ```
-
-3. Initialize Firebase Hosting in your project directory:
-   ```bash
-   firebase init hosting
-   ```
-   - Select your Firebase project
-   - Set public directory to `.` (current directory)
-   - Configure as single-page app: **No**
-   - Don't overwrite existing files
-
-4. Create `firebase-config.js` locally (it can be deployed to Firebase Hosting)
-
-5. Deploy:
-   ```bash
-   firebase deploy --only hosting
-   ```
-
-6. Your app will be available at: `https://your-project-id.web.app`
-
-**Advantages:**
-- Same infrastructure as your database
-- Easy CDN and SSL
-- Custom domain support
-- Rollback support
-
-### Option C: Vercel Deployment
-
-1. Install Vercel CLI:
-   ```bash
-   npm install -g vercel
-   ```
-
-2. Deploy:
-   ```bash
-   vercel
-   ```
-
-3. Add environment variables in Vercel dashboard or use snippet injection similar to Netlify
-
-### Option D: GitHub Pages
-
-GitHub Pages works but requires some additional setup for the Firebase config:
-
-1. Use GitHub Secrets to store Firebase credentials
-2. Create a GitHub Action to generate `firebase-config.js` on deployment
-3. Push to `gh-pages` branch
-
-**Note:** GitHub Pages is public by default, so your Firebase config will be visible.
-
-## Post-Deployment Checklist
-
-After deploying, verify everything works:
-
-- [ ] Site loads without errors
-- [ ] Can log in with password
-- [ ] Sync status shows "Synced" when online
-- [ ] Can create, edit, and delete notes
-- [ ] Notes sync in real-time (test with multiple devices/browsers)
-- [ ] Offline mode works (disconnect internet, make changes, reconnect)
-- [ ] Migration prompt appears if you have localStorage notes
-- [ ] Theme toggle works and persists
-- [ ] Export and download features work
-- [ ] Check browser console for errors
-
-## Firebase API Key Security
-
-**Important:** Firebase API keys in web apps are meant to be public. They identify your Firebase project and are safe to include in client-side code. Security is handled by:
-
-1. **Firestore Security Rules** - Control who can read/write data
-2. **Firebase Anonymous Authentication** - Users must be signed in
-3. **Frontend Password** - Extra layer for personal use
-
-However, be aware:
-- Anyone can see your Firebase project ID and API key
-- Your password is also visible in the source code
-- This setup is suitable for personal use, not for sensitive data
-- For enterprise use, implement proper user authentication
-
-## Monitoring Your Deployment
-
-After deployment, monitor your app:
-
-1. **Firebase Console - Usage Tab**
-   - Check read/write operations
-   - Monitor storage usage
-   - Ensure you're within free tier limits
-
-2. **Firebase Console - Authentication**
-   - View anonymous sign-ins
-   - Monitor for unusual activity
-
-3. **Netlify/Hosting Analytics**
-   - Monitor site traffic
-   - Check for errors in logs
-
-4. **Browser Console**
-   - Test on different devices
-   - Check for JavaScript errors
-
-## Updating Your Deployment
-
-To update your deployed app:
-
-### For Git-based deployments (Netlify, Vercel)
+Start backend:
 ```bash
-git add .
-git commit -m "Update app"
-git push origin main
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
 ```
-Your hosting platform will automatically redeploy.
 
-### For Firebase Hosting
+Serve frontend with Nginx (point to `frontend/dist`).
+
+### 5. Nginx Configuration
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+    root /path/to/movie-mimic/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## Cloud Deployment
+
+### AWS Deployment
+
+#### Option 1: ECS (Elastic Container Service)
+
+1. Push Docker images to ECR
+2. Create ECS task definitions
+3. Configure load balancer
+4. Setup auto-scaling
+
+#### Option 2: EC2 + Docker
+
+1. Launch EC2 instance
+2. Follow Docker deployment steps
+3. Configure Security Groups
+
+#### Option 3: Elastic Beanstalk
+
+1. Create Docker platform environment
+2. Deploy with `eb deploy`
+
+### Google Cloud Platform
+
+#### Option 1: Cloud Run
+
+1. Build and push to Container Registry
+2. Deploy with `gcloud run deploy`
+3. Configure load balancer
+
+#### Option 2: Compute Engine
+
+1. Create VM instance
+2. Follow Docker deployment steps
+3. Configure Cloud Load Balancing
+
+### Azure
+
+#### Option 1: Container Instances
+
+1. Push to Azure Container Registry
+2. Deploy container group
+3. Configure Application Gateway
+
+#### Option 2: Virtual Machines
+
+1. Create VM
+2. Follow manual deployment steps
+3. Configure Azure Front Door
+
+## Environment Configuration
+
+### Production Variables
+
 ```bash
-firebase deploy --only hosting
+NODE_ENV=production
+PORT=5000
+
+# Database
+DB_PATH=/var/lib/movie-mimic/movie-mimic.sqlite
+
+# File Upload
+MAX_UPLOAD_SIZE=2147483648
+ALLOWED_VIDEO_FORMATS=mp4,webm,mkv,avi,mov
+ALLOWED_SUBTITLE_FORMATS=srt,vtt,ass
+
+# FFmpeg
+FFMPEG_PATH=/usr/bin/ffmpeg
+FFPROBE_PATH=/usr/bin/ffprobe
+
+# CORS
+CORS_ORIGIN=https://yourdomain.com
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE_PATH=/var/log/movie-mimic/app.log
 ```
 
-### For manual deployments
-Re-upload your files to the hosting platform.
+### Security Notes
 
-## Custom Domain Setup
+- Never commit `.env` to git
+- Use strong random values for secrets
+- Restrict file permissions on `.env`: `chmod 600 .env`
+- Use environment-specific configurations
 
-### Netlify
-1. Go to Site Settings > Domain management
-2. Add custom domain
-3. Follow DNS configuration instructions
+## SSL/HTTPS Setup
 
-### Firebase Hosting
+### Let's Encrypt (Free)
+
 ```bash
-firebase hosting:channel:deploy production --only hosting
+# Install Certbot
+sudo apt-get install certbot -y
+
+# Get certificate (standalone mode)
+sudo certbot certonly --standalone -d yourdomain.com
+
+# Auto-renewal
+sudo crontab -e
+# Add: 0 0 * * * certbot renew --quiet
 ```
-Then add your custom domain in Firebase Console.
 
-## Troubleshooting Deployment Issues
+Configure paths in Nginx:
+```nginx
+ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+```
 
-### "Firebase configuration not found" on deployed site
-- Ensure `firebase-config.js` is included in deployment
-- Check that the file path is correct
-- Verify no build process is removing it
-- Check browser console for 404 errors
+### Cloud-Provided SSL
 
-### CORS errors
-- Firebase API calls should not have CORS issues
-- If you encounter them, check Firebase project settings
-- Ensure your domain is authorized in Firebase Console
+AWS: AWS Certificate Manager (ACM)
+GCP: Cloud Certificate Manager
+Azure: Key Vault + Application Gateway
 
-### 403 Forbidden errors from Firestore
-- Check Firestore Security Rules
-- Verify Anonymous Authentication is enabled
-- Check that the user is signed in (console.log auth state)
+## Monitoring & Maintenance
 
-### High Firebase usage/costs
-- Implement query limits/pagination
-- Add indexes for frequently queried fields
-- Monitor Firebase Console usage tab
-- Consider caching strategies
+### Health Checks
 
-## Backup and Disaster Recovery
+```bash
+# Check API health
+curl https://yourdomain.com/api/health
 
-Before going live:
+# Check PM2 processes
+pm2 status
 
-1. **Export your notes** using the "Export All" button
-2. Store the backup in a safe location
-3. Test importing notes by manually adding them to a fresh Firebase project
-4. Document your Firebase project settings
-5. Keep a copy of your `firebase-config.js` in a secure location
+# Check Docker containers
+docker-compose ps
+```
 
-## Privacy and Terms of Service
+### Log Management
 
-When deploying for personal use, consider:
+```bash
+# View backend logs
+tail -f /var/log/movie-mimic/app.log
 
-- Adding a privacy policy (if required by your jurisdiction)
-- Documenting data handling practices
-- Informing users about Firebase data storage
-- Complying with GDPR/CCPA if applicable
+# PM2 logs
+pm2 logs
 
-## Need Help?
+# Docker logs
+docker-compose logs -f backend
+```
 
-If you encounter issues:
+### Backups
 
-1. Check browser console for errors
-2. Verify all setup steps in [FIREBASE_SETUP.md](./FIREBASE_SETUP.md)
-3. Review Firebase Console for errors/logs
-4. Check your hosting platform's documentation
-5. Test locally first before deploying
+#### Database Backup
+
+```bash
+# Manual backup
+cp /var/lib/movie-mimic/movie-mimic.sqlite backup_$(date +%Y%m%d).sqlite
+
+# Automate with cron
+0 2 * * * cp /var/lib/movie-mimic/movie-mimic.sqlite /backup/movie-mimic_$(date +\%Y\%m\%d).sqlite
+```
+
+#### Files Backup
+
+```bash
+# Backup uploads directory
+rsync -av /var/lib/movie-mimic/uploads/ /backup/uploads_$(date +%Y%m%d)/
+
+# Or use AWS S3 sync
+aws s3 sync /var/lib/movie-mimic/uploads s3://your-bucket/backups/
+```
+
+### Updates
+
+```bash
+# Pull latest code
+git pull origin main
+
+# Rebuild and restart (Docker)
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Or with PM2
+cd backend && npm run build
+pm2 restart movie-mimic-backend
+```
+
+### Scaling
+
+#### Horizontal Scaling
+
+- Add more backend instances behind load balancer
+- Use shared storage (NFS, S3)
+- Implement distributed session storage
+
+#### Vertical Scaling
+
+- Increase CPU/RAM
+- Optimize database queries
+- Add caching layer
+
+## Performance Tuning
+
+### Nginx Optimization
+
+```nginx
+# /etc/nginx/nginx.conf
+worker_processes auto;
+worker_connections 2048;
+
+gzip on;
+gzip_types text/plain text/css application/json application/javascript;
+gzip_min_length 1000;
+
+client_max_body_size 2G;
+proxy_connect_timeout 600s;
+proxy_send_timeout 600s;
+proxy_read_timeout 600s;
+```
+
+### Database Optimization
+
+- Run VACUUM periodically: `sqlite3 data.db "VACUUM;"`
+- Create appropriate indexes (already in schema)
+- Consider WAL mode (enabled by default)
+
+### Application Optimization
+
+- Enable production mode
+- Use CDN for static assets
+- Implement caching headers
+- Consider Redis for caching
+
+## Troubleshooting
+
+### Application Won't Start
+
+1. Check logs: `docker-compose logs` or `pm2 logs`
+2. Verify port availability: `netstat -tlnp | grep :5000`
+3. Check environment variables
+4. Verify dependencies are installed
+
+### File Upload Fails
+
+1. Check disk space: `df -h`
+2. Verify uploads directory permissions
+3. Check file size limit in Nginx: `client_max_body_size`
+4. Verify FFmpeg is working
+
+### High Memory Usage
+
+1. Monitor with: `htop` or `docker stats`
+2. Limit container resources in docker-compose.yml
+3. Check for memory leaks
+4. Restart services periodically
+
+### Database Locked
+
+1. Stop application
+2. Remove lock files: `rm -f data/*.wal data/*.shm`
+3. Restart application
+
+### SSL Certificate Issues
+
+1. Check certificate expiry: `certbot certificates`
+2. Renew manually: `certbot renew`
+3. Verify Nginx configuration: `nginx -t`
+4. Check firewall allows port 443
+
+## Security Checklist
+
+- [ ] HTTPS enabled with valid SSL
+- [ ] CORS configured to trusted origins only
+- [ ] Rate limiting enabled
+- [ ] Security headers configured (Helmet)
+- [ ] Environment variables not committed
+- [ ] File upload restrictions in place
+- [ ] Input validation on all endpoints
+- [ ] Regular security updates applied
+- [ ] Firewall rules configured
+- [ ] Backup strategy in place
+- [ ] Monitoring and alerting setup
+- [ ] Log rotation configured
+
+## Cost Estimation
+
+### Minimum VPS
+
+- 2 CPU cores
+- 4GB RAM
+- 50GB SSD
+- Cost: ~$20-40/month
+
+### Recommended VPS
+
+- 4 CPU cores
+- 8GB RAM
+- 200GB SSD
+- Cost: ~$50-80/month
+
+### Cloud Services
+
+- AWS EC2 (t3.medium): ~$30/month
+- GCP Compute Engine (e2-medium): ~$40/month
+- Azure Standard B2s: ~$50/month
+
+Additional costs:
+- Storage (S3, etc.): $0.023/GB
+- Bandwidth: Varies by provider
+- SSL certificates: Free (Let's Encrypt) or paid
+
+## Support
+
+For deployment issues:
+
+1. Check [troubleshooting section](#troubleshooting)
+2. Review [SETUP.md](./SETUP.md)
+3. Check application logs
+4. Open issue on GitHub with:
+   - Deployment method
+   - Server specifications
+   - Error messages
+   - Configuration (redacted)
+
+---
+
+**Good luck with your deployment!** 🚀

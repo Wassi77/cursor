@@ -1,358 +1,366 @@
-# Personal Note-Taking Website
+# Movie Mimic 🎬
 
-A password-protected personal note-taking web application designed for Netlify deployment. Capture, organize, and manage your thoughts and concepts from any device with this clean, modern, and fully client-side solution.
+A comprehensive full-stack web application for learning English by mimicking actors from movies. Import your favorite videos, practice recording yourself, and export comparison videos to track your progress.
 
 ## Features
 
-### 🔒 Authentication
-- Simple password-based authentication
-- Session persistence to avoid repeated logins
-- Default password: `notes123` (can be changed in script.js)
-- Quick logout functionality
+### 🎥 Video Management
+- **Import Videos**: Drag-and-drop or file picker upload (MP4, WebM, MKV, AVI, MOV)
+- **Automatic Thumbnails**: Generate thumbnails from uploaded videos
+- **Video Metadata**: Extract duration, resolution, and codec information
+- **Subtitle Support**: SRT, VTT, and ASS subtitle formats
 
-### 📝 Note Management (CRUD)
-- **Create**: Quick add new notes with title and content
-- **Read**: View all notes in an organized list
-- **Update**: Edit existing notes from any device
-- **Delete**: Remove notes with confirmation dialog
-- **Images**: Upload or paste images directly into notes
+### 🎤 Practice Mode
+- **Dual Mode Interface**: Switch between PLAY MODE and RECORD MODE with a single spacebar
+- **Webcam Recording**: Record yourself with audio and video
+- **Playback Controls**: Full video player with custom controls
+- **Playback Speed**: Adjust from 0.5x to 2x speed
+- **Session Management**: Organize your practice sessions
 
-### 🏷️ Organization Features
-- **Categorize**: Add categories/tags to notes for better organization
-- **Search**: Real-time search across titles, content, and categories
-- **Filter**: Filter notes by category
-- **Sort**: Sort by date (created/modified) or title
-- **Pin**: Pin important notes to the top of the list
-- **Archive**: Archive completed or old notes (access via Archive button)
+### 📊 Session Review
+- **Recording Chunks**: View all recorded segments
+- **Reorder Recordings**: Drag and drop to reorder chunks
+- **Delete Individual Chunks**: Remove unwanted recordings
+- **Preview Mode**: Watch any recording before export
 
-### 💾 Download & Export
-- Download individual notes as text files
-- Export all notes as JSON backup with metadata
-- Preserve formatting in downloads
+### 📥 Export & Download
+- **Two Export Types**:
+  - **Solo Recording**: Just your performance
+  - **Comparison Video**: Original movie interleaved with your recordings
+- **Quality Options**: 480p, 720p, 1080p
+- **Format Selection**: MP4 or WebM
+- **FPS Control**: 24, 30, or 60 frames per second
+- **Download History**: Track all exported videos
 
-### 🎨 UI/UX Design
-- Clean, modern, intuitive interface
-- Mobile-responsive design (works on all devices)
-- Dark/light theme toggle with system preference detection
-- Visual feedback for all actions (save, delete, etc.)
-- Smooth transitions and animations
-- Empty state guidance
+### ⚙️ Settings & Configuration
+- **Theme Toggle**: Dark/light mode
+- **Device Selection**: Choose microphone and camera
+- **Audio Output**: Select playback device
+- **Data Management**: Clear local data and cache
+- **App Information**: Version and details
 
-### ⚡ Technical Implementation
-- Pure HTML, CSS, JavaScript (no dependencies)
-- **Cloud Database**: Firebase Firestore for cross-device sync
-- **Offline Support**: Works without internet, syncs when reconnected
-- **Real-time Sync**: Instant updates across all devices
-- **Migration**: Automatic migration from localStorage to cloud
-- Cross-browser compatible
-- Mobile-first responsive design
-- Optimized for Netlify static hosting
+## Tech Stack
 
-### ☁️ Cloud Sync Features
-- **Cross-Device Access**: Access your notes from any device
-- **Real-time Synchronization**: Changes sync instantly across all devices
-- **Offline Mode**: Create and edit notes offline, auto-sync when back online
-- **Sync Status Indicator**: Visual feedback showing sync state (synced, syncing, offline, error)
-- **Automatic Migration**: Seamlessly migrate existing localStorage notes to cloud
-- **Conflict-Free**: Firestore handles concurrent edits automatically
+### Frontend
+- **React 18** with TypeScript and Strict Mode
+- **Tailwind CSS** for styling
+- **Framer Motion** for animations
+- **Zustand** for state management
+- **React Router** for navigation
+- **Axios** for API communication
+
+### Backend
+- **Node.js** with Express.js
+- **TypeScript** with strict mode
+- **SQLite3** database
+- **FFmpeg** for video processing
+- **Multer** for file uploads
+- **Winston** for logging
+- **Zod** for validation
+
+### DevOps
+- **Docker** for containerization
+- **Docker Compose** for local development
+- **ESLint** for linting
+- **Prettier** for code formatting
 
 ## Quick Start
 
-### Local Development
+### Prerequisites
 
-1. Clone the repository:
+- Node.js 18+ and npm 9+
+- FFmpeg and FFprobe installed
+- Docker (optional, for containerized development)
+
+### Installation
+
+1. **Clone the repository**:
    ```bash
-   git clone <your-repo-url>
-   cd <your-repo-name>
+   git clone <repository-url>
+   cd movie-mimic
    ```
 
-2. Copy the Firebase configuration template and add your project credentials:
+2. **Install dependencies**:
    ```bash
-   cp firebase-config.example.js firebase-config.js
-   ```
-   Update the new `firebase-config.js` with your Firebase settings. See [Firebase Setup](#firebase-setup) for step-by-step guidance.
-
-3. (Optional) Update the access password in `firebase-config.js` by setting `window.firestoreAccessPassword` to your desired password.
-
-4. Open `index.html` in your browser or use a local server:
-   ```bash
-   # Using Python 3
-   python3 -m http.server 8000
-   
-   # Using Node.js (if http-server is installed)
-   npx http-server
+   npm install
    ```
 
-5. Navigate to `http://localhost:8000` in your browser
-
-6. Login with your configured password (default: `notes123`)
-
-### Firebase Setup
-
-**⚠️ Important:** To enable cloud synchronization, you must set up Firebase Firestore. Without it, the app will show an error.
-
-Follow the detailed setup guide in **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** for step-by-step instructions.
-
-**Quick summary:**
-1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com/)
-2. Enable Firestore Database and Anonymous Authentication
-3. Copy `firebase-config.example.js` to `firebase-config.js`
-4. Add your Firebase credentials to `firebase-config.js`
-5. (Optional) Set a custom password in the same file
-
-### Changing the Password
-
-To change the default password, edit `firebase-config.js`:
-
-```javascript
-window.firestoreAccessPassword = "your-secure-password";
-```
-
-**Note:** The password is checked on the frontend only. Anyone with access to the source code can see it, so don't use this for highly sensitive information.
-
-## Deployment to Netlify
-
-### Option 1: Deploy via Netlify UI
-
-1. Create a free account at [netlify.com](https://www.netlify.com)
-
-2. Click "Add new site" → "Deploy manually"
-
-3. Drag and drop your project folder (or zip file)
-
-4. Your site will be live at a unique Netlify URL (e.g., `https://your-site-name.netlify.app`)
-
-### Option 2: Deploy via GitHub
-
-1. Push your code to a GitHub repository
-
-2. Go to [netlify.com](https://www.netlify.com) and click "Add new site" → "Import an existing project"
-
-3. Connect your GitHub account and select your repository
-
-4. Configure build settings:
-   - Build command: (leave empty)
-   - Publish directory: `.` (or leave empty)
-
-5. Click "Deploy site"
-
-### Option 3: Deploy via Netlify CLI
-
-1. Install the Netlify CLI:
+3. **Set up environment variables**:
    ```bash
-   npm install -g netlify-cli
+   cp .env.example .env
+   ```
+   Edit `.env` with your configuration (or use defaults for development).
+
+4. **Install FFmpeg**:
+   - **Ubuntu/Debian**: `sudo apt-get install ffmpeg`
+   - **macOS**: `brew install ffmpeg`
+   - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+5. **Start the application**:
+   ```bash
+   # Start both frontend and backend
+   npm run dev
+
+   # Or use Docker
+   npm run docker:up
    ```
 
-2. Login to Netlify:
-   ```bash
-   netlify login
-   ```
-
-3. Initialize and deploy:
-   ```bash
-   netlify init
-   netlify deploy --prod
-   ```
+6. **Open your browser**:
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:5000/api/health
 
 ## Usage Guide
 
-### Creating Notes
-1. Click the "➕ New Note" button
-2. Enter a title and content (required)
-3. Optionally add a category
-4. Optionally add images by clicking "🖼️ Upload Image" or pasting with Ctrl+V/Cmd+V
-5. Click "Save Note"
+### 1. Import a Video
 
-### Editing Notes
-1. Find your note in the list
-2. Click the "✏️ Edit" button
-3. Make your changes
-4. Click "Save Note"
+1. Click "Import Video" on the dashboard
+2. Drag and drop a video file or click to browse
+3. Wait for upload and thumbnail generation
+4. Your video appears in the dashboard
 
-### Organizing Notes
-- **Search**: Use the search bar to find notes by title, content, or category
-- **Filter**: Select a category from the dropdown to filter notes
-- **Sort**: Choose a sorting option (Modified Date, Created Date, or Title)
-- **Pin**: Click "📍 Pin" to keep important notes at the top
-- **Archive**: Click "📦 Archive" to hide notes from the main view
+### 2. Start a Practice Session
 
-### Viewing Archived Notes
-1. Click the "📦 Archived" button in the toolbar
-2. View all archived notes in a modal
-3. Unarchive or delete notes as needed
+1. Click on a video card
+2. A new session is created
+3. **PLAY MODE**: Watch the movie with subtitles
+4. Press **Spacebar** to switch to **RECORD MODE**
+5. Record yourself mimicking the actor
+6. Press **Spacebar** again to stop recording and switch back
+7. Repeat as needed
 
-### Downloading Notes
-- **Single Note**: Click "💾 Download" on any note to download it as a text file
-- **All Notes**: Click "💾 Export All" to download all notes as a JSON backup
+### 3. Review and Edit Recordings
 
-### Theme Toggle
-Click the theme button (🌙/☀️) in the header to switch between light and dark modes. Your preference is saved automatically.
+1. Navigate to the Session Review page
+2. See all recording chunks in order
+3. Preview individual chunks
+4. Delete unwanted recordings
+5. Reorder chunks if needed
+6. Rename the session
 
-## Data Storage
+### 4. Export Videos
 
-Cloud synchronization is handled by **Firebase Firestore**:
-- **Notes**: Stored in Firestore with metadata (id, title, content, category, tags, timestamps, pinned, archived)
-- **Real-time Sync**: Changes propagate instantly across connected devices
-- **Offline Caching**: Firestore caches data locally and syncs when back online
+1. Go to the Export page
+2. Choose export settings (quality, format, FPS)
+3. Export either:
+   - **Solo Recording**: Just your performance
+   - **Comparison Video**: Movie + your recordings interleaved
+4. Wait for processing to complete
+5. Download your exported videos
 
-Local storage is still used for non-sensitive preferences:
-- **Authentication Session**: Tracks whether you're logged in on this device
-- **Theme Preference**: Stores your light/dark mode selection
+## Keyboard Shortcuts
 
-⚠️ **Important**: Ensure you have configured Firebase before using the app. Without it, notes cannot be saved.
+| Shortcut | Action |
+|----------|--------|
+| `Space` | Toggle between PLAY and RECORD modes |
+| `Esc` | Exit current session |
+| `Arrow Left/Right` | Seek backward/forward (in video player) |
 
-## Browser Compatibility
-
-Works on all modern browsers:
-- Chrome/Edge (v90+)
-- Firefox (v88+)
-- Safari (v14+)
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
-## Security Considerations
-
-This application uses **Firebase Firestore** for cloud storage with the following security characteristics:
-
-✅ **Pros**:
-- Data stored in secure Google Cloud infrastructure
-- Transport encryption (HTTPS/TLS)
-- Firebase Anonymous Authentication for backend access control
-- Firestore Security Rules to control database access
-- Offline persistence with secure local caching
-
-⚠️ **Limitations**:
-- Password is checked on the frontend only (anyone with source code access can see it)
-- No encryption of data at rest beyond Firebase's default security
-- All users sharing the same password access the same note collection
-- Suitable for personal use, not for highly sensitive/confidential information
-
-**For better security:**
-- Use a strong, unique password in `firebase-config.js`
-- Don't commit `firebase-config.js` to public repositories (it's in `.gitignore`)
-- Deploy to a private URL if possible
-- Regularly backup your notes using the Export feature
-- Monitor Firebase Console for unauthorized access attempts
-
-**Firebase Security:**
-- Anonymous authentication ensures only authenticated users can access Firestore
-- Security Rules prevent unauthorized access to the database
-- Firebase audit logs available in the console
-- Free tier has generous limits for personal use
-
-## Customization
-
-### Changing Colors
-Edit the CSS variables in `styles.css`:
-```css
-:root {
-    --primary-color: #3a86ff; /* Change this to your preferred color */
-    --primary-hover: #2c6ddf;
-}
-```
-
-### Adding Features
-The codebase is well-structured and easy to extend:
-- `script.js`: All JavaScript functionality
-- `styles.css`: All styling
-- `index.html`: HTML structure
-
-## File Structure
+## Project Structure
 
 ```
-personal-notes/
-├── index.html                # Main HTML file
-├── styles.css                # All styling and themes
-├── script.js                 # Application logic with Firestore integration
-├── firebase-config.example.js# Firebase configuration template
-├── FIREBASE_SETUP.md         # Detailed Firebase setup instructions
-├── .env.example              # Environment variable reference
-├── netlify.toml              # Netlify configuration
-├── README.md                 # This file
-├── LICENSE                   # License file
-└── .gitignore                # Git ignore file
+movie-mimic/
+├── frontend/              # React frontend application
+│   ├── src/
+│   │   ├── components/    # Reusable React components
+│   │   ├── pages/        # Page components
+│   │   ├── hooks/        # Custom React hooks
+│   │   ├── services/     # API services
+│   │   ├── store/        # State management (Zustand)
+│   │   ├── utils/        # Utility functions
+│   │   └── types/        # TypeScript types
+│   ├── public/           # Static assets
+│   └── package.json
+├── backend/              # Node.js/Express backend
+│   ├── src/
+│   │   ├── config/       # Configuration files
+│   │   ├── database/     # Database setup and migrations
+│   │   ├── middleware/   # Express middleware
+│   │   ├── routes/       # API routes
+│   │   ├── services/     # Business logic
+│   │   └── utils/        # Utility functions
+│   └── package.json
+├── shared/               # Shared types and constants
+│   ├── types/
+│   └── constants/
+├── uploads/              # Uploaded files (gitignored)
+│   ├── videos/
+│   ├── subtitles/
+│   ├── recordings/
+│   ├── exports/
+│   └── thumbnails/
+├── data/                 # Database files (gitignored)
+├── docker-compose.yml    # Docker configuration
+├── package.json          # Root package.json
+└── README.md
 ```
 
-> **Note:** Create `firebase-config.js` (ignored by Git) with your Firebase credentials based on the provided example file.
+## API Documentation
+
+See [API.md](./API.md) for complete API documentation.
+
+### Main Endpoints
+
+- `GET /api/health` - Health check
+- `GET /api/config` - Application configuration
+- `POST /api/videos/upload` - Upload a video
+- `GET /api/videos` - List all videos
+- `POST /api/sessions` - Create a new session
+- `GET /api/sessions/:id` - Get session details
+- `POST /api/sessions/:id/recordings` - Upload recording
+- `POST /api/sessions/:id/export` - Export session as video
+
+## Development
+
+### Running Tests
+
+```bash
+# Run linter
+npm run lint
+
+# Run linter with auto-fix
+npm run lint:fix
+
+# Format code
+npm run format
+```
+
+### Building for Production
+
+```bash
+# Build all packages
+npm run build
+
+# Build frontend only
+npm run build:frontend
+
+# Build backend only
+npm run build:backend
+```
+
+### Database Management
+
+```bash
+# Run migrations
+npm run db:migrate
+
+# Seed database (for testing)
+npm run db:seed
+```
+
+## Docker Deployment
+
+### Using Docker Compose
+
+```bash
+# Start all services
+npm run docker:up
+
+# View logs
+npm run docker:logs
+
+# Stop all services
+npm run docker:down
+```
+
+### Production Deployment
+
+1. Build the Docker images:
+   ```bash
+   docker-compose build
+   ```
+
+2. Start the services:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Configure reverse proxy (nginx, traefik, etc.) for HTTPS
 
 ## Troubleshooting
 
-### "Firebase configuration not found" Error
-- Ensure `firebase-config.js` exists in the project root
-- Verify it's properly configured with your Firebase project credentials
-- Check the browser console for specific error messages
-- See [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) for setup instructions
+### FFmpeg Not Found
 
-### Notes not saving
-- Check internet connection and sync status indicator
-- Verify Firebase project is set up correctly
-- Check browser console for errors (F12)
-- Ensure Firestore security rules are configured properly
-- Verify you're not exceeding Firebase free tier limits
+If you see "FFmpeg not found" error:
 
-### Sync Status shows "Error" or "Offline"
-- Check your internet connection
-- Verify Firebase project credentials are correct
-- Check Firebase Console for service status
-- Review Firestore Security Rules
-- Try logging out and back in
+- **Linux**: `sudo apt-get install ffmpeg` or `sudo yum install ffmpeg`
+- **macOS**: `brew install ffmpeg`
+- **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH
 
-### Migration prompt not appearing
-- The app only prompts if localStorage contains notes AND you haven't migrated yet
-- Check if `localStorage.getItem('notes')` has data in browser console
-- The prompt only shows once; if skipped, it won't show again
+### Port Already in Use
 
-### Notes not syncing across devices
-- Ensure you're using the same password on both devices
-- Verify both devices have internet connectivity
-- Check sync status indicator on both devices
-- Wait a few seconds for real-time sync to propagate
+Change the port in `.env`:
+```
+PORT=5001
+```
 
-### Password not working
-- Verify you're using the correct password from `firebase-config.js`
-- Default is `notes123` unless changed
-- Clear browser cache and try again
+### File Upload Fails
 
-### Theme not persisting
-- Check if localStorage is enabled in your browser
-- Try toggling the theme again
+Check:
+- File size is under 2GB limit
+- File format is supported (MP4, WebM, MKV, AVI, MOV)
+- Uploads directory has write permissions
+- FFmpeg is properly installed
 
-### Multiple tabs warning in console
-- This is normal - Firestore offline persistence can only be enabled in one tab
-- App will still work correctly in all tabs
-- Real-time sync will work across all open tabs
+### Database Errors
 
-### Firebase quota exceeded
-- Check your Firebase Console Usage tab
-- Free tier: 50K reads/day, 20K writes/day
-- Consider exporting notes and clearing old data
-- Upgrade to Firebase Blaze plan if needed (pay-as-you-go)
+Reset the database:
+```bash
+rm -f data/movie-mimic.sqlite
+```
+
+The database will be recreated on next restart.
+
+## Roadmap
+
+### Future Features
+
+- [ ] User authentication and accounts
+- [ ] Cloud storage (S3, Google Cloud)
+- [ ] Speech recognition for accuracy scoring
+- [ ] Pose detection for gesture analysis
+- [ ] Accent analysis and feedback
+- [ ] Emotion detection from facial expressions
+- [ ] Collaborative recording sessions
+- [ ] Analytics and progress tracking
+- [ ] Mobile apps (iOS, Android)
+- [ ] Social sharing features
+
+### AI Integration
+
+The application is designed to support future AI features:
+
+- Speech-to-text for accuracy measurement
+- Real-time feedback on pronunciation
+- Gesture and emotion analysis
+- Personalized learning recommendations
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run linter and formatter
+5. Submit a pull request
 
 ## License
 
-This project is open source and available under the MIT License.
+MIT License - see [LICENSE](./LICENSE) for details.
 
 ## Support
 
-For issues or questions:
-1. Check the troubleshooting section
-2. Review browser console for errors
-3. Verify localStorage is working
-4. Check Netlify deployment logs if deployment fails
+For issues, questions, or suggestions:
 
-## Future Enhancements
+1. Check the [troubleshooting section](#troubleshooting)
+2. Review the [API documentation](./API.md)
+3. Check the [setup guide](./SETUP.md)
+4. Open an issue on GitHub
 
-Possible features to add:
-- Import notes from JSON backup
-- Rich text editor (WYSIWYG)
-- Markdown support and preview
-- Color coding for categories
-- Keyboard shortcuts
-- Note templates
-- Bulk operations (delete, archive multiple notes)
-- End-to-end encryption for notes
-- Enhanced search with regex
-- Note versioning/history
+## Credits
+
+Built with ❤️ for language learners worldwide.
 
 ---
 
-Made with ❤️ for personal productivity
+**Happy Practicing!** 🎬🎤

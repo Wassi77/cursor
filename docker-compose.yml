@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: movie-mimic-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DB_PATH=/app/data/movie-mimic.sqlite
+      - FFMPEG_PATH=/usr/bin/ffmpeg
+      - FFPROBE_PATH=/usr/bin/ffprobe
+      - CORS_ORIGIN=http://localhost:5173
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    command: npm run dev
+    networks:
+      - movie-mimic-network
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: movie-mimic-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/dist
+    command: npm run dev
+    networks:
+      - movie-mimic-network
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
+  db:
+    image: alpine:latest
+    container_name: movie-mimic-data
+    volumes:
+      - ./data:/data
+    networks:
+      - movie-mimic-network
+    command: tail -f /dev/null
+
+networks:
+  movie-mimic-network:
+    driver: bridge
+
+volumes:
+  movie-mimic-data:
+    driver: local
