@@ -79,6 +79,51 @@ function localDeletePdf(key) {
 }
 
 
+// ---- Supabase cloud PDF storage (free tier: 1 GB, ~50 MB/file) --------
+// This stores PDFs in a real cloud bucket so they sync across all devices.
+// If Supabase isn't configured or is unreachable, we fall back to saving the
+// file in the browser (IndexedDB) so uploads always still work.
+let supabaseClient = null;
+if (window.supabase && window.supabaseConfig && window.supabaseConfig.url && window.supabaseConfig.anonKey) {
+    try {
+        supabaseClient = window.supabase.createClient(window.supabaseConfig.url, window.supabaseConfig.anonKey);
+    } catch (e) {
+        console.warn('Supabase init failed; PDFs will be stored locally.', e);
+        supabaseClient = null;
+    }
+}
+const SUPABASE_BUCKET = 'pdfs';
+
+function supabaseStoragePath(uid, fileName) {
+    return `${uid}/${fileName}`;
+}
+
+async function uploadPdfToSupabase(uid, fileName, file) {
+    if (!supabaseClient) throw new Error('Supabase not configured');
+    const path = supabaseStoragePath(uid, fileName);
+    const { error } = await supabaseClient.storage.from(SUPABASE_BUCKET).upload(path, file, {
+        contentType: 'application/pdf',
+        duplex: 'half'
+    });
+    if (error) throw error;
+    const { data } = supabaseClient.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
+    if (!data || !data.publicUrl) throw new Error('Could not create public URL');
+    return { storageUrl: data.publicUrl, storagePath: path };
+}
+
+async function deletePdfFromSupabase(path) {
+    if (!supabaseClient) return;
+    await supabaseClient.storage.from(SUPABASE_BUCKET).remove([path]);
+}
+
+function withTimeout(promise, ms, message) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'Cloud upload timed out.')), ms))
+    ]);
+}
+
+
 const pdfEls = {
     tabNotes: document.getElementById('tab-notes-btn'),
     tabDocs: document.getElementById('tab-docs-btn'),
@@ -304,27 +349,17 @@ async function handlePdfUpload(event) {
     let storageUrl = '';
     let storagePath = '';
 
-    // Try cloud storage first. NOTE: Firebase Cloud Storage now requires a
-    // paid (Blaze) plan, so on the free plan this will either fail or hang.
-    // We fall back to saving the file in this browser (IndexedDB) for free.
+    // Try cloud storage first (Supabase free tier) so files sync across devices.
+    // If Supabase isn't configured or is unreachable, fall back to saving the
+    // file in this browser (IndexedDB) so uploads always still work.
     try {
-        if (!storage) throw new Error('Cloud storage not configured');
-        const ref = storage.ref('pdfs').child(uid).child(fileName);
-        storagePath = ref.fullPath;
-        const cloudPromise = new Promise((resolve, reject) => {
-            const task = ref.put(file);
-            task.on('state_changed',
-                (snapshot) => updateUploadProgress(snapshot.bytesTransferred / snapshot.totalBytes),
-                (error) => reject(error),
-                () => resolve(task.snapshot.ref.getDownloadURL())
-            );
-        });
-        // If cloud storage stalls (common on the free plan), fall back to local
-        // storage instead of leaving the progress bar stuck at 0%.
-        storageUrl = await Promise.race([
-            cloudPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud upload timed out (free Starter plan needs paid Blaze for storage).')), 8000))
-        ]);
+        const result = await withTimeout(
+            uploadPdfToSupabase(uid, fileName, file),
+            8000,
+            'Cloud upload timed out — check your Supabase config.'
+        );
+        storageUrl = result.storageUrl;
+        storagePath = result.storagePath;
     } catch (cloudError) {
         console.warn('Cloud upload unavailable; saving locally instead:', cloudError);
         try {
@@ -342,6 +377,7 @@ async function handlePdfUpload(event) {
         }
     }
 
+    updateUploadProgress(1);
     pdfEls.uploadProgressLabel.textContent = 'Counting pages…';
     const pageCount = await countPdfPages(file);
     hideUploadProgress();
@@ -363,9 +399,9 @@ async function handlePdfUpload(event) {
         });
 
         if (isLocalUrl(storageUrl)) {
-            showToast('✅ Saved on this device (cloud upload needs a paid plan)', 'success');
+            showToast('✅ Saved on this device', 'success');
         } else {
-            showToast('✅ Uploaded — opening…', 'success');
+            showToast('✅ Uploaded to cloud — opening…', 'success');
         }
         openPdfReader(docRef.id);
     } catch (error) {
@@ -618,6 +654,8 @@ async function deletePdf(pdfId) {
         await col.doc(pdfId).delete();
         if (isLocalUrl(pdf.storageUrl)) {
             await localDeletePdf(localKeyFromUrl(pdf.storageUrl)).catch(() => {});
+        } else if (supabaseClient && pdf.storagePath && !pdf.storagePath.startsWith('pdfs/')) {
+            await deletePdfFromSupabase(pdf.storagePath).catch(() => {});
         } else if (storage && pdf.storagePath) {
             await storage.ref(pdf.storagePath).delete().catch(() => {});
         }
