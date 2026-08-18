@@ -15,6 +15,20 @@ service firebase.storage {
       allow update, delete: if request.auth.token.email != null && request.auth.uid == uid;
     }
 
+    // PDF documents: only email-authenticated users, only their own folder.
+    // Files are stored under pdfs/{uid}/...
+    match /pdfs/{uid}/{fileName} {
+      allow read: if request.auth.token.email != null && request.auth.uid == uid;
+
+      // Uploads: real PDF files, max 50 MB
+      allow create: if request.auth.token.email != null
+        && request.auth.uid == uid
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+
+      allow update, delete: if request.auth.token.email != null && request.auth.uid == uid;
+    }
+
     // Deny everything else (including listing other users' files)
     match /{allPaths=**} {
       allow read, write: if false;

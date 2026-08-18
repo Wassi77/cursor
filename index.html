@@ -52,6 +52,10 @@
                     <input type="text" id="search-input" placeholder="🔍 Search notes..." class="search-input">
                 </div>
                 <div class="toolbar-actions">
+                    <div class="tab-bar" role="tablist">
+                        <button id="tab-notes-btn" class="tab-btn active" role="tab">📝 Notes</button>
+                        <button id="tab-docs-btn" class="tab-btn" role="tab">📄 Docs</button>
+                    </div>
                     <select id="category-filter" class="filter-select">
                         <option value="">All Categories</option>
                     </select>
@@ -69,6 +73,10 @@
                     <button id="new-note-btn" class="btn btn-primary">
                         ➕ New Note
                     </button>
+                    <button id="add-pdf-btn" class="btn btn-primary" style="display: none;">
+                        ➕ PDF
+                    </button>
+                    <input type="file" id="pdf-upload-input" accept="application/pdf,.pdf" hidden>
                 </div>
             </div>
 
@@ -77,6 +85,14 @@
                     <p class="empty-icon">📝</p>
                     <h2>No notes yet</h2>
                     <p>Create your first note to get started!</p>
+                </div>
+            </div>
+
+            <div id="docs-container" class="notes-container" style="display: none;">
+                <div class="empty-state">
+                    <p class="empty-icon">📄</p>
+                    <h2>No documents yet</h2>
+                    <p>Upload a PDF to read it here anytime.</p>
                 </div>
             </div>
         </main>
@@ -151,6 +167,23 @@
         </div>
     </div>
 
+    <div id="pdf-reader-modal" class="modal pdf-reader-modal">
+        <div class="pdf-reader-header">
+            <button id="pdf-reader-back" class="btn btn-secondary">← Back</button>
+            <span id="pdf-reader-title" class="pdf-reader-title"></span>
+            <span id="pdf-reader-page-label" class="pdf-reader-page-label"></span>
+            <div class="pdf-reader-controls">
+                <button id="pdf-zoom-out" class="btn btn-icon" title="Zoom out">−</button>
+                <button id="pdf-zoom-in" class="btn btn-icon" title="Zoom in">+</button>
+                <button id="pdf-prev-page" class="btn btn-secondary" title="Previous page (←)">◀</button>
+                <button id="pdf-next-page" class="btn btn-secondary" title="Next page (→)">▶</button>
+            </div>
+        </div>
+        <div class="pdf-reader-body">
+            <canvas id="pdf-reader-canvas"></canvas>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Firebase SDK -->
@@ -163,5 +196,7 @@
     <script src="firebase-config.js"></script>
     
     <script src="script.js"></script>
+    <script src="vendor/pdf.min.js"></script>
+    <script src="pdfs.js"></script>
 </body>
 </html>

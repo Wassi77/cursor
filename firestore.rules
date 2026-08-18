@@ -19,6 +19,10 @@ service cloud.firestore {
       match /notes/{noteId} {
         allow read, write: if isOwner(uid);
       }
+
+      match /pdfs/{pdfId} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // Legacy shared collection from before the security upgrade.

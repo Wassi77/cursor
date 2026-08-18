@@ -383,6 +383,7 @@ async function handleLogout() {
     // Clear state
     notes = [];
     categories = new Set();
+    resetPdfs();
 
     // Close any open modals
     closeNoteModal();
@@ -431,6 +432,7 @@ async function showApp() {
 
     // Start listening to Firestore
     startRealtimeSync();
+    startPdfsSync();
 }
 
 async function checkForMigration() {
