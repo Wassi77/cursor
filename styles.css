@@ -1224,6 +1224,69 @@ button {
 
 /* ---------- PDF reader ---------- */
 
+.pdf-note-panel {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    width: 300px;
+    max-width: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    z-index: 30;
+    overflow: hidden;
+}
+
+.pdf-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--reader-bg);
+}
+
+.pdf-note-hint {
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.6;
+    margin-left: 4px;
+}
+
+.pdf-note-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.7;
+    padding: 2px 4px;
+}
+
+.pdf-note-close:hover {
+    opacity: 1;
+}
+
+.pdf-note-text {
+    width: 100%;
+    min-height: 120px;
+    max-height: 240px;
+    border: none;
+    outline: none;
+    resize: vertical;
+    padding: 10px 12px;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    line-height: 1.5;
+}
+
 .pdf-reader-modal {
     padding: 0;
     align-items: stretch;

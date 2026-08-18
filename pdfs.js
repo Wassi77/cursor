@@ -16,7 +16,8 @@ const pdfReaderState = {
     zoom: 1,
     fit: false,
     renderTask: null,
-    saveTimer: null
+    saveTimer: null,
+    noteTimer: null
 };
 
 // ---- Local (browser) PDF storage fallback -----------------------------
@@ -131,6 +132,10 @@ const pdfEls = {
     readerPageLabel: document.getElementById('pdf-reader-page-label'),
     pdfContainer: document.getElementById('pdf-pages'),
     readerBody: document.querySelector('.pdf-reader-body'),
+    noteBtn: document.getElementById('pdf-note-btn'),
+    notePanel: document.getElementById('pdf-note-panel'),
+    noteClose: document.getElementById('pdf-note-close'),
+    noteText: document.getElementById('pdf-note-text'),
     zoomIn: document.getElementById('pdf-zoom-in'),
     zoomOut: document.getElementById('pdf-zoom-out'),
     prevPage: document.getElementById('pdf-prev-page'),
@@ -172,6 +177,7 @@ function startPdfsSync() {
                     return {
                         id: doc.id,
                         title: data.title || 'Untitled',
+                        note: data.note || '',
                         storageUrl: data.storageUrl || '',
                         storagePath: data.storagePath || '',
                         size: data.size || 0,
@@ -210,6 +216,11 @@ function resetPdfs() {
         clearTimeout(pdfReaderState.saveTimer);
         pdfReaderState.saveTimer = null;
     }
+    if (pdfReaderState.noteTimer) {
+        clearTimeout(pdfReaderState.noteTimer);
+        pdfReaderState.noteTimer = null;
+    }
+    if (pdfEls.notePanel) pdfEls.notePanel.style.display = 'none';
     pdfEls.readerModal.classList.remove('open');
     switchTab('notes');
     renderPdfList();
@@ -604,6 +615,38 @@ function updatePdfDoc(pdfId, fields) {
     col.doc(pdfId).update(fields).catch((error) => console.warn('PDF update failed:', error));
 }
 
+function togglePdfNote(forceShow) {
+    const panel = pdfEls.notePanel;
+    if (!panel) return;
+    const hidden = panel.style.display === 'none' || panel.style.display === '';
+    const willShow = (typeof forceShow === 'boolean') ? forceShow : hidden;
+    if (willShow) {
+        const pdf = pdfReaderState.docId ? pdfs.find(p => p.id === pdfReaderState.docId) : null;
+        if (pdfEls.noteText) pdfEls.noteText.value = (pdf && pdf.note) || '';
+        panel.style.display = 'flex';
+        if (pdfEls.noteText) pdfEls.noteText.focus();
+    } else {
+        saveQuickNote();
+        panel.style.display = 'none';
+    }
+}
+
+function saveQuickNote() {
+    const state = pdfReaderState;
+    if (!state.docId) return;
+    const text = pdfEls.noteText ? pdfEls.noteText.value : '';
+
+    // Keep the local copy in sync right away.
+    const pdf = pdfs.find(p => p.id === state.docId);
+    if (pdf) pdf.note = text;
+
+    // Save to Firestore (debounced) so it syncs across devices.
+    clearTimeout(state.noteTimer);
+    state.noteTimer = setTimeout(() => {
+        updatePdfDoc(state.docId, { note: text });
+    }, 400);
+}
+
 function goToPage(delta) {
     scrollToPage(pdfReaderState.page + delta);
 }
@@ -631,7 +674,10 @@ function closePdfReader() {
     pdfReaderState.renderTask = null;
     pdfReaderState.data = null;
     pdfReaderState.rendered = null;
+    clearTimeout(pdfReaderState.saveTimer);
+    clearTimeout(pdfReaderState.noteTimer);
     if (pdfEls.pdfContainer) pdfEls.pdfContainer.innerHTML = '';
+    if (pdfEls.notePanel) pdfEls.notePanel.style.display = 'none';
     pdfEls.readerModal.classList.remove('open');
     renderPdfList();
 }
@@ -706,6 +752,12 @@ pdfEls.pdfUploadInput.addEventListener('change', handlePdfUpload);
 pdfEls.readerBack.addEventListener('click', closePdfReader);
 pdfEls.prevPage.addEventListener('click', () => goToPage(-1));
 pdfEls.nextPage.addEventListener('click', () => goToPage(1));
+pdfEls.noteBtn.addEventListener('click', () => togglePdfNote());
+pdfEls.noteClose.addEventListener('click', () => togglePdfNote(false));
+if (pdfEls.noteText) {
+    pdfEls.noteText.addEventListener('input', saveQuickNote);
+    pdfEls.noteText.addEventListener('blur', saveQuickNote);
+}
 pdfEls.zoomIn.addEventListener('click', () => zoomPdf(0.25));
 pdfEls.zoomOut.addEventListener('click', () => zoomPdf(-0.25));
 pdfEls.readerModal.addEventListener('click', (e) => {
@@ -721,6 +773,14 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'Escape') closePdfReader();
     else if (e.key === '+' || e.key === '=') zoomPdf(0.25);
     else if (e.key === '-') zoomPdf(-0.25);
+    else if (e.key === 'n' || e.key === 'N') {
+        const el = document.activeElement;
+        if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable)) {
+            return;
+        }
+        e.preventDefault();
+        togglePdfNote();
+    }
 });
 
 window.addEventListener('pagehide', saveProgress);

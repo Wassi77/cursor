@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://firebasestorage.googleapis.com https://*.supabase.co; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com https://*.supabase.co https://*.supabase.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'">
     <title>Personal Notes</title>
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <div id="login-screen" class="auth-container">
@@ -174,6 +174,7 @@
             <span id="pdf-reader-title" class="pdf-reader-title"></span>
             <span id="pdf-reader-page-label" class="pdf-reader-page-label"></span>
             <div class="pdf-reader-controls">
+                <button id="pdf-note-btn" class="btn btn-icon" title="Quick note (N)">📝</button>
                 <button id="pdf-zoom-out" class="btn btn-icon" title="Zoom out">−</button>
                 <button id="pdf-zoom-in" class="btn btn-icon" title="Zoom in">+</button>
                 <button id="pdf-prev-page" class="btn btn-secondary" title="Previous page (←)">◀</button>
@@ -182,6 +183,13 @@
         </div>
         <div class="pdf-reader-body">
             <div id="pdf-pages" class="pdf-pages"></div>
+        </div>
+        <div id="pdf-note-panel" class="pdf-note-panel" style="display: none;">
+            <div class="pdf-note-header">
+                <span>📝 Quick Note <span class="pdf-note-hint">(N)</span></span>
+                <button id="pdf-note-close" class="pdf-note-close" title="Hide note (N)">✕</button>
+            </div>
+            <textarea id="pdf-note-text" class="pdf-note-text" placeholder="Jot something down…"></textarea>
         </div>
     </div>
 
@@ -210,8 +218,8 @@
     <script src="firebase-config.js"></script>
     <script src="supabase-config.js"></script>
 
-    <script src="script.js?v=5"></script>
-    <script src="vendor/pdf.min.js?v=5"></script>
-    <script src="pdfs.js?v=5"></script>
+    <script src="script.js?v=6"></script>
+    <script src="vendor/pdf.min.js?v=6"></script>
+    <script src="pdfs.js?v=6"></script>
 </body>
 </html>
