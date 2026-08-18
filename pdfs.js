@@ -674,6 +674,10 @@ function closePdfReader() {
     pdfReaderState.renderTask = null;
     pdfReaderState.data = null;
     pdfReaderState.rendered = null;
+    // Force-save the note so nothing typed is lost even if the debounce hadn't fired.
+    if (pdfReaderState.docId && pdfEls.noteText) {
+        updatePdfDoc(pdfReaderState.docId, { note: pdfEls.noteText.value });
+    }
     clearTimeout(pdfReaderState.saveTimer);
     clearTimeout(pdfReaderState.noteTimer);
     if (pdfEls.pdfContainer) pdfEls.pdfContainer.innerHTML = '';
