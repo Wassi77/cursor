@@ -14,6 +14,7 @@ const pdfReaderState = {
     page: 1,
     pageCount: 0,
     zoom: 1,
+    fit: false,
     renderTask: null,
     saveTimer: null
 };
@@ -401,6 +402,7 @@ async function openPdfReader(pdfId) {
     try {
         pdfReaderState.docId = pdfId;
         pdfReaderState.zoom = 1;
+        pdfReaderState.fit = true;
         pdfEls.readerTitle.textContent = pdf.title;
         pdfEls.readerPageLabel.textContent = 'Loading…';
         pdfEls.readerModal.classList.add('open');
@@ -448,15 +450,33 @@ async function renderPdfPage() {
 
     try {
         const page = await state.pdf.getPage(state.page);
-        const viewport = page.getViewport({ scale: state.zoom });
+
+        // First render of a document: auto-fit the page to the reader width so
+        // the text is a comfortable, readable size.
+        if (state.fit) {
+            state.fit = false;
+            const base = page.getViewport({ scale: 1 });
+            const body = pdfEls.readerBody;
+            const avail = (body ? body.clientWidth : base.width) - 56;
+            state.zoom = avail > 0 ? Math.max(0.3, avail / base.width) : 1;
+        }
+
+        // Render at high resolution (scaled for retina/high-DPI screens) but
+        // display at logical size, so text stays crisp instead of pixelated.
+        const dpr = window.devicePixelRatio || 1;
+        const viewport = page.getViewport({ scale: state.zoom * dpr });
+
         const canvas = pdfEls.readerCanvas;
         const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = Math.floor(viewport.width / dpr) + 'px';
+        canvas.style.height = Math.floor(viewport.height / dpr) + 'px';
+
         state.renderTask = page.render({ canvasContext: ctx, viewport });
         await state.renderTask.promise;
         state.renderTask = null;
-        pdfEls.readerPageLabel.textContent = `Page ${state.page} / ${state.pageCount}`;
+        pdfEls.readerPageLabel.textContent = `Page ${state.page} / ${state.pageCount} · ${Math.round(state.zoom * 100)}%`;
         if (pdfEls.readerBody) {
             pdfEls.readerBody.scrollTop = 0;
         }
@@ -501,7 +521,7 @@ function goToPage(delta) {
 }
 
 function zoomPdf(delta) {
-    pdfReaderState.zoom = Math.min(3, Math.max(0.5, pdfReaderState.zoom + delta));
+    pdfReaderState.zoom = Math.min(5, Math.max(0.5, pdfReaderState.zoom + delta));
     renderPdfPage();
 }
 

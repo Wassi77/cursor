@@ -1273,16 +1273,15 @@ button {
     flex: 1;
     overflow: auto;
     display: flex;
-    justify-content: center;
     padding: 24px;
     background: var(--reader-bg);
 }
 
 .pdf-reader-body canvas {
+    display: block;
+    margin: auto;
     background: #ffffff;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    max-width: 100%;
-    height: auto;
     border-radius: 4px;
 }
 
