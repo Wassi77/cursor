@@ -18,6 +18,66 @@ const pdfReaderState = {
     saveTimer: null
 };
 
+// ---- Local (browser) PDF storage fallback -----------------------------
+// Firebase Cloud Storage now requires a paid (Blaze) plan. To keep PDFs
+// working for free, we save the file bytes in this browser's IndexedDB and
+// keep only metadata (title, page count, progress) in Firestore.
+// Documents saved this way are only available on THIS device/browser.
+const LOCAL_PREFIX = 'imo-local://';
+let localDbPromise = null;
+
+function openLocalDb() {
+    if (localDbPromise) return localDbPromise;
+    localDbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('imo-local-files', 1);
+        req.onupgradeneeded = () => {
+            const d = req.result;
+            if (!d.objectStoreNames.contains('pdfs')) {
+                d.createObjectStore('pdfs', { keyPath: 'key' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+    return localDbPromise;
+}
+
+function localKeyFromUrl(url) {
+    return String(url).slice(LOCAL_PREFIX.length);
+}
+
+function isLocalUrl(url) {
+    return typeof url === 'string' && url.indexOf(LOCAL_PREFIX) === 0;
+}
+
+function localPutPdf(key, file) {
+    return openLocalDb().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction('pdfs', 'readwrite');
+        tx.objectStore('pdfs').put({ key, blob: file, name: file.name, size: file.size, type: file.type });
+        tx.oncomplete = () => resolve(key);
+        tx.onerror = () => reject(tx.error);
+    }));
+}
+
+function localGetPdf(key) {
+    return openLocalDb().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction('pdfs', 'readonly');
+        const req = tx.objectStore('pdfs').get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+    }));
+}
+
+function localDeletePdf(key) {
+    return openLocalDb().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction('pdfs', 'readwrite');
+        tx.objectStore('pdfs').delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    }));
+}
+
+
 const pdfEls = {
     tabNotes: document.getElementById('tab-notes-btn'),
     tabDocs: document.getElementById('tab-docs-btn'),
@@ -154,6 +214,9 @@ function renderPdfList() {
     sorted.forEach(pdf => {
         const pct = pdf.pageCount ? Math.min(100, Math.round((pdf.lastPage / pdf.pageCount) * 100)) : 0;
         const metaParts = [];
+        if (isLocalUrl(pdf.storageUrl)) {
+            metaParts.push('💻 This device');
+        }
         if (pdf.lastPage) {
             metaParts.push(`Page <strong>${pdf.lastPage}</strong> of ${pdf.pageCount || '?'}`);
         } else if (pdf.pageCount) {
@@ -227,19 +290,27 @@ async function handlePdfUpload(event) {
         showToast(`PDF too large (max ${MAX_PDF_SIZE_MB}MB)`, 'error');
         return;
     }
-    if (!storage || !auth || !auth.currentUser) {
-        showToast('Storage not available', 'error');
+    if (!auth || !auth.currentUser) {
+        showToast('Please sign in first.', 'error');
         return;
     }
 
     const uid = auth.currentUser.uid;
     const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.pdf`;
-    const ref = storage.ref('pdfs').child(uid).child(fileName);
 
     showUploadProgress(`Uploading ${file.name}…`);
 
+    let storageUrl = '';
+    let storagePath = '';
+
+    // Try cloud storage first. NOTE: Firebase Cloud Storage now requires a
+    // paid (Blaze) plan, so on the free plan this will fail and we fall back
+    // to saving the file in this browser (IndexedDB) for free.
     try {
-        const storageUrl = await new Promise((resolve, reject) => {
+        if (!storage) throw new Error('Cloud storage not configured');
+        const ref = storage.ref('pdfs').child(uid).child(fileName);
+        storagePath = ref.fullPath;
+        storageUrl = await new Promise((resolve, reject) => {
             const task = ref.put(file);
             task.on('state_changed',
                 (snapshot) => updateUploadProgress(snapshot.bytesTransferred / snapshot.totalBytes),
@@ -247,17 +318,35 @@ async function handlePdfUpload(event) {
                 () => resolve(task.snapshot.ref.getDownloadURL())
             );
         });
+    } catch (cloudError) {
+        console.warn('Cloud upload failed; saving locally instead:', cloudError);
+        try {
+            showUploadProgress(`Saving ${file.name} on this device…`);
+            const localKey = `${uid}/${fileName}`;
+            await localPutPdf(localKey, file);
+            updateUploadProgress(1);
+            storageUrl = LOCAL_PREFIX + localKey;
+            storagePath = '';
+        } catch (localError) {
+            hideUploadProgress();
+            console.error('Local PDF save error:', localError);
+            showToast('Upload failed: ' + (localError.message || 'Unknown error'), 'error');
+            return;
+        }
+    }
 
-        pdfEls.uploadProgressLabel.textContent = 'Counting pages…';
-        const pageCount = await countPdfPages(file);
-        hideUploadProgress();
+    pdfEls.uploadProgressLabel.textContent = 'Counting pages…';
+    const pageCount = await countPdfPages(file);
+    hideUploadProgress();
 
-        const col = pdfsCol();
-        if (!col) return;
+    const col = pdfsCol();
+    if (!col) return;
+
+    try {
         const docRef = await col.add({
             title: file.name.replace(/\.pdf$/i, ''),
             storageUrl,
-            storagePath: ref.fullPath,
+            storagePath,
             size: file.size,
             pageCount,
             lastPage: 0,
@@ -266,15 +355,19 @@ async function handlePdfUpload(event) {
             lastReadAt: null
         });
 
-        showToast('✅ Uploaded — opening…', 'success');
+        if (isLocalUrl(storageUrl)) {
+            showToast('✅ Saved on this device (cloud upload needs a paid plan)', 'success');
+        } else {
+            showToast('✅ Uploaded — opening…', 'success');
+        }
         openPdfReader(docRef.id);
     } catch (error) {
         hideUploadProgress();
-        console.error('PDF upload error:', error);
-        if (error && (error.code === 'storage/unauthorized' || error.code === 'permission-denied')) {
-            showToast('Upload blocked: storage rules need updating in the Firebase console.', 'error');
+        console.error('PDF metadata save error:', error);
+        if (error && error.code === 'permission-denied') {
+            showToast('Docs sync blocked: Firestore security rules need updating.', 'error');
         } else {
-            showToast('Upload failed: ' + (error.message || 'Unknown error'), 'error');
+            showToast('Failed to save document: ' + (error.message || 'Unknown error'), 'error');
         }
     }
 }
@@ -294,7 +387,10 @@ async function countPdfPages(file) {
 
 async function openPdfReader(pdfId) {
     const pdf = pdfs.find(p => p.id === pdfId);
-    if (!pdf || !storage) return;
+    if (!pdf || !pdf.storageUrl) {
+        showToast('This document has no file attached.', 'error');
+        return;
+    }
 
     try {
         pdfReaderState.docId = pdfId;
@@ -303,7 +399,19 @@ async function openPdfReader(pdfId) {
         pdfEls.readerPageLabel.textContent = 'Loading…';
         pdfEls.readerModal.classList.add('open');
 
-        pdfReaderState.pdf = await pdfjsLib.getDocument({ url: pdf.storageUrl }).promise;
+        let pdfSource;
+        if (isLocalUrl(pdf.storageUrl)) {
+            const rec = await localGetPdf(localKeyFromUrl(pdf.storageUrl));
+            if (!rec || !rec.blob) {
+                throw new Error('This PDF is stored on this device only. Open it from the device/browser where it was uploaded.');
+            }
+            const buffer = await rec.blob.arrayBuffer();
+            pdfSource = { data: buffer };
+        } else {
+            pdfSource = { url: pdf.storageUrl };
+        }
+
+        pdfReaderState.pdf = await pdfjsLib.getDocument(pdfSource).promise;
         pdfReaderState.pageCount = pdfReaderState.pdf.numPages;
 
         if (pdf.pageCount !== pdfReaderState.pageCount) {
@@ -421,7 +529,9 @@ async function deletePdf(pdfId) {
 
     try {
         await col.doc(pdfId).delete();
-        if (storage && pdf.storagePath) {
+        if (isLocalUrl(pdf.storageUrl)) {
+            await localDeletePdf(localKeyFromUrl(pdf.storageUrl)).catch(() => {});
+        } else if (storage && pdf.storagePath) {
             await storage.ref(pdf.storagePath).delete().catch(() => {});
         }
         showToast('Document deleted 🗑️');
@@ -437,11 +547,20 @@ async function downloadPdf(pdfId) {
 
     try {
         showToast('Downloading…');
-        const response = await fetch(pdf.storageUrl);
-        if (!response.ok) {
-            throw new Error('Download failed (' + response.status + ')');
+        let blob;
+        if (isLocalUrl(pdf.storageUrl)) {
+            const rec = await localGetPdf(localKeyFromUrl(pdf.storageUrl));
+            if (!rec || !rec.blob) {
+                throw new Error('File not found on this device (stored locally).');
+            }
+            blob = rec.blob;
+        } else {
+            const response = await fetch(pdf.storageUrl);
+            if (!response.ok) {
+                throw new Error('Download failed (' + response.status + ')');
+            }
+            blob = await response.blob();
         }
-        const blob = await response.blob();
         const objectUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = objectUrl;
