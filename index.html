@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://firebasestorage.googleapis.com; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'">
     <title>Personal Notes</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
     <div id="login-screen" class="auth-container">
@@ -181,7 +181,7 @@
             </div>
         </div>
         <div class="pdf-reader-body">
-            <canvas id="pdf-reader-canvas"></canvas>
+            <div id="pdf-pages" class="pdf-pages"></div>
         </div>
     </div>
 
@@ -206,8 +206,8 @@
     <!-- Firebase Configuration (optional - only if firebase-config.js exists) -->
     <script src="firebase-config.js"></script>
     
-    <script src="script.js?v=2"></script>
-    <script src="vendor/pdf.min.js?v=2"></script>
-    <script src="pdfs.js?v=2"></script>
+    <script src="script.js?v=3"></script>
+    <script src="vendor/pdf.min.js?v=3"></script>
+    <script src="pdfs.js?v=3"></script>
 </body>
 </html>

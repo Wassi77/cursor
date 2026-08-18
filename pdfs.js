@@ -92,7 +92,7 @@ const pdfEls = {
     readerDownload: document.getElementById('pdf-download-btn'),
     readerTitle: document.getElementById('pdf-reader-title'),
     readerPageLabel: document.getElementById('pdf-reader-page-label'),
-    readerCanvas: document.getElementById('pdf-reader-canvas'),
+    pdfContainer: document.getElementById('pdf-pages'),
     readerBody: document.querySelector('.pdf-reader-body'),
     zoomIn: document.getElementById('pdf-zoom-in'),
     zoomOut: document.getElementById('pdf-zoom-out'),
@@ -427,7 +427,13 @@ async function openPdfReader(pdfId) {
         }
 
         pdfReaderState.page = Math.min(Math.max(1, pdf.lastPage || 1), pdfReaderState.pageCount);
-        await renderPdfPage();
+        await renderPdfDocument();
+
+        // Render the initial viewport pages, then jump to the resume page.
+        requestAnimationFrame(() => {
+            renderVisiblePages();
+            scrollToPage(pdfReaderState.page);
+        });
 
         if (pdf.lastPage > 1) {
             showToast(`Resumed at page ${pdfReaderState.page}`);
@@ -439,55 +445,107 @@ async function openPdfReader(pdfId) {
     }
 }
 
-async function renderPdfPage() {
+async function renderPdfDocument() {
     const state = pdfReaderState;
     if (!state.pdf) return;
 
-    if (state.renderTask) {
-        try { state.renderTask.cancel(); } catch (e) { /* ignore */ }
-        state.renderTask = null;
-    }
+    const body = pdfEls.readerBody;
+    const container = pdfEls.pdfContainer;
+    if (container) container.innerHTML = '';
 
-    try {
-        const page = await state.pdf.getPage(state.page);
+    // Per-document render bookkeeping.
+    state.data = new Map();      // wrap element -> { page, viewport }
+    state.rendered = new Set();  // wrap elements already drawn
 
-        // First render of a document: auto-fit the page to the reader width so
-        // the text is a comfortable, readable size.
-        if (state.fit) {
-            state.fit = false;
-            const base = page.getViewport({ scale: 1 });
-            const body = pdfEls.readerBody;
+    // First render of a document: auto-fit the page width to the reader.
+    if (state.fit) {
+        state.fit = false;
+        try {
+            const first = await state.pdf.getPage(1);
+            const base = first.getViewport({ scale: 1 });
             const avail = (body ? body.clientWidth : base.width) - 56;
             state.zoom = avail > 0 ? Math.max(0.3, avail / base.width) : 1;
+        } catch (e) {
+            state.zoom = 1;
         }
+    }
 
-        // Render at high resolution (scaled for retina/high-DPI screens) but
-        // display at logical size, so text stays crisp instead of pixelated.
-        const dpr = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio || 1;
+
+    // Create a wrapper + canvas for every page (sized for high-DPI so text
+    // stays crisp). Pages are rasterized lazily as they scroll into view.
+    for (let i = 1; i <= state.pageCount; i++) {
+        const page = await state.pdf.getPage(i);
         const viewport = page.getViewport({ scale: state.zoom * dpr });
 
-        const canvas = pdfEls.readerCanvas;
-        const ctx = canvas.getContext('2d');
+        const wrap = document.createElement('div');
+        wrap.className = 'pdf-page';
+
+        const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
         canvas.style.width = Math.floor(viewport.width / dpr) + 'px';
         canvas.style.height = Math.floor(viewport.height / dpr) + 'px';
 
-        state.renderTask = page.render({ canvasContext: ctx, viewport });
-        await state.renderTask.promise;
-        state.renderTask = null;
-        pdfEls.readerPageLabel.textContent = `Page ${state.page} / ${state.pageCount} · ${Math.round(state.zoom * 100)}%`;
-        if (pdfEls.readerBody) {
-            pdfEls.readerBody.scrollTop = 0;
-        }
-        scheduleProgressSave();
-    } catch (error) {
-        if (error && error.name === 'RenderingCancelledException') {
-            return;
-        }
-        console.error('Page render error:', error);
-        showToast('Failed to render page: ' + (error.message || 'Unknown error'), 'error');
+        wrap.appendChild(canvas);
+        if (container) container.appendChild(wrap);
+        state.data.set(wrap, { page, viewport });
     }
+}
+
+function renderVisiblePages() {
+    const state = pdfReaderState;
+    const body = pdfEls.readerBody;
+    if (!body || !state.data || !state.pdf) return;
+
+    const bodyRect = body.getBoundingClientRect();
+    const topLimit = bodyRect.top - 500;
+    const bottomLimit = bodyRect.bottom + 500;
+
+    state.data.forEach(({ page, viewport }, wrap) => {
+        if (state.rendered.has(wrap)) return;
+        const rect = wrap.getBoundingClientRect();
+        if (rect.bottom < topLimit || rect.top > bottomLimit) return;
+        state.rendered.add(wrap);
+        const canvas = wrap.querySelector('canvas');
+        if (canvas) {
+            page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise.catch(() => {});
+        }
+    });
+}
+
+function getCurrentPageFromScroll() {
+    const state = pdfReaderState;
+    const body = pdfEls.readerBody;
+    if (!body || !pdfEls.pdfContainer) return 1;
+    const pages = pdfEls.pdfContainer.querySelectorAll('.pdf-page');
+    if (!pages.length) return 1;
+    const anchor = body.getBoundingClientRect().top + body.clientHeight * 0.35;
+    for (let i = 0; i < pages.length; i++) {
+        if (pages[i].getBoundingClientRect().bottom > anchor) return i + 1;
+    }
+    return pages.length;
+}
+
+function scrollToPage(target) {
+    const state = pdfReaderState;
+    const pages = pdfEls.pdfContainer ? pdfEls.pdfContainer.children : [];
+    if (!pages.length) return;
+    state.page = Math.max(1, Math.min(target, pages.length));
+    const wrap = pages[state.page - 1];
+    if (wrap && wrap.scrollIntoView) {
+        wrap.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+}
+
+function onReaderScroll() {
+    const state = pdfReaderState;
+    if (!state.pdf) return;
+    const newPage = getCurrentPageFromScroll();
+    state.page = newPage;
+    pdfEls.readerPageLabel.textContent = `Page ${state.page} / ${state.pageCount} · ${Math.round(state.zoom * 100)}%`;
+    renderVisiblePages();
+    scheduleProgressSave();
 }
 
 function scheduleProgressSave() {
@@ -513,16 +571,16 @@ function updatePdfDoc(pdfId, fields) {
 }
 
 function goToPage(delta) {
-    const state = pdfReaderState;
-    const target = state.page + delta;
-    if (target < 1 || target > state.pageCount) return;
-    state.page = target;
-    renderPdfPage();
+    scrollToPage(pdfReaderState.page + delta);
 }
 
-function zoomPdf(delta) {
-    pdfReaderState.zoom = Math.min(5, Math.max(0.5, pdfReaderState.zoom + delta));
-    renderPdfPage();
+async function zoomPdf(delta) {
+    const state = pdfReaderState;
+    const anchor = state.page || 1;
+    state.zoom = Math.min(5, Math.max(0.3, state.zoom + delta));
+    await renderPdfDocument();
+    scrollToPage(anchor);
+    renderVisiblePages();
 }
 
 function closePdfReader() {
@@ -537,6 +595,9 @@ function closePdfReader() {
     pdfReaderState.pdf = null;
     pdfReaderState.docId = null;
     pdfReaderState.renderTask = null;
+    pdfReaderState.data = null;
+    pdfReaderState.rendered = null;
+    if (pdfEls.pdfContainer) pdfEls.pdfContainer.innerHTML = '';
     pdfEls.readerModal.classList.remove('open');
     renderPdfList();
 }
@@ -627,3 +688,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('pagehide', saveProgress);
+
+if (pdfEls.readerBody) {
+    pdfEls.readerBody.addEventListener('scroll', onReaderScroll);
+}
