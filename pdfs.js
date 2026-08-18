@@ -28,6 +28,7 @@ const pdfEls = {
     pdfUploadInput: document.getElementById('pdf-upload-input'),
     readerModal: document.getElementById('pdf-reader-modal'),
     readerBack: document.getElementById('pdf-reader-back'),
+    readerDownload: document.getElementById('pdf-download-btn'),
     readerTitle: document.getElementById('pdf-reader-title'),
     readerPageLabel: document.getElementById('pdf-reader-page-label'),
     readerCanvas: document.getElementById('pdf-reader-canvas'),
@@ -35,7 +36,11 @@ const pdfEls = {
     zoomIn: document.getElementById('pdf-zoom-in'),
     zoomOut: document.getElementById('pdf-zoom-out'),
     prevPage: document.getElementById('pdf-prev-page'),
-    nextPage: document.getElementById('pdf-next-page')
+    nextPage: document.getElementById('pdf-next-page'),
+    uploadProgress: document.getElementById('upload-progress'),
+    uploadProgressLabel: document.getElementById('upload-progress-label'),
+    uploadProgressPct: document.getElementById('upload-progress-pct'),
+    uploadProgressBar: document.getElementById('upload-progress-bar')
 };
 
 function pdfsCol() {
@@ -172,11 +177,16 @@ function renderPdfList() {
             </div>
             <div class="pdf-card-actions">
                 <button class="btn btn-primary pdf-open-btn">${pdf.lastPage ? `▶ Continue (p. ${pdf.lastPage})` : '▶ Read'}</button>
+                <button class="btn btn-secondary pdf-download-btn" title="Download PDF">⬇</button>
                 <button class="btn btn-secondary pdf-delete-btn" title="Delete document">🗑️</button>
             </div>
         `;
 
         card.querySelector('.pdf-open-btn').addEventListener('click', () => openPdfReader(pdf.id));
+        card.querySelector('.pdf-download-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            downloadPdf(pdf.id);
+        });
         card.querySelector('.pdf-delete-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             deletePdf(pdf.id);
@@ -184,6 +194,23 @@ function renderPdfList() {
         card.querySelector('.pdf-card-info').addEventListener('click', () => openPdfReader(pdf.id));
         pdfEls.docsContainer.appendChild(card);
     });
+}
+
+function showUploadProgress(label) {
+    pdfEls.uploadProgressLabel.textContent = label || 'Uploading…';
+    pdfEls.uploadProgressPct.textContent = '0%';
+    pdfEls.uploadProgressBar.style.width = '0%';
+    pdfEls.uploadProgress.style.display = 'block';
+}
+
+function updateUploadProgress(frac) {
+    const pct = Math.round(frac * 100);
+    pdfEls.uploadProgressBar.style.width = pct + '%';
+    pdfEls.uploadProgressPct.textContent = pct + '%';
+}
+
+function hideUploadProgress() {
+    pdfEls.uploadProgress.style.display = 'none';
 }
 
 async function handlePdfUpload(event) {
@@ -209,12 +236,21 @@ async function handlePdfUpload(event) {
     const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.pdf`;
     const ref = storage.ref('pdfs').child(uid).child(fileName);
 
-    showToast(`Uploading ${file.name}...`);
+    showUploadProgress(`Uploading ${file.name}…`);
 
     try {
-        await ref.put(file);
-        const storageUrl = await ref.getDownloadURL();
+        const storageUrl = await new Promise((resolve, reject) => {
+            const task = ref.put(file);
+            task.on('state_changed',
+                (snapshot) => updateUploadProgress(snapshot.bytesTransferred / snapshot.totalBytes),
+                (error) => reject(error),
+                () => resolve(task.snapshot.ref.getDownloadURL())
+            );
+        });
+
+        pdfEls.uploadProgressLabel.textContent = 'Counting pages…';
         const pageCount = await countPdfPages(file);
+        hideUploadProgress();
 
         const col = pdfsCol();
         if (!col) return;
@@ -233,6 +269,7 @@ async function handlePdfUpload(event) {
         showToast('✅ Uploaded — opening…', 'success');
         openPdfReader(docRef.id);
     } catch (error) {
+        hideUploadProgress();
         console.error('PDF upload error:', error);
         if (error && (error.code === 'storage/unauthorized' || error.code === 'permission-denied')) {
             showToast('Upload blocked: storage rules need updating in the Firebase console.', 'error');
@@ -391,6 +428,32 @@ async function deletePdf(pdfId) {
     } catch (error) {
         console.error('Delete PDF error:', error);
         showToast('Failed to delete: ' + error.message, 'error');
+    }
+}
+
+async function downloadPdf(pdfId) {
+    const pdf = pdfs.find(p => p.id === pdfId);
+    if (!pdf || !pdf.storageUrl) return;
+
+    try {
+        showToast('Downloading…');
+        const response = await fetch(pdf.storageUrl);
+        if (!response.ok) {
+            throw new Error('Download failed (' + response.status + ')');
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = pdf.title.toLowerCase().endsWith('.pdf') ? pdf.title : pdf.title + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+        showToast('Downloaded 💾');
+    } catch (error) {
+        console.error('Download error:', error);
+        showToast('Download failed: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 

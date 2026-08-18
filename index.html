@@ -170,6 +170,7 @@
     <div id="pdf-reader-modal" class="modal pdf-reader-modal">
         <div class="pdf-reader-header">
             <button id="pdf-reader-back" class="btn btn-secondary">← Back</button>
+            <button id="pdf-download-btn" class="btn btn-secondary" title="Download PDF">⬇</button>
             <span id="pdf-reader-title" class="pdf-reader-title"></span>
             <span id="pdf-reader-page-label" class="pdf-reader-page-label"></span>
             <div class="pdf-reader-controls">
@@ -181,6 +182,16 @@
         </div>
         <div class="pdf-reader-body">
             <canvas id="pdf-reader-canvas"></canvas>
+        </div>
+    </div>
+
+    <div id="upload-progress" class="upload-progress" style="display: none;">
+        <div class="upload-progress-info">
+            <span id="upload-progress-label">Uploading…</span>
+            <span id="upload-progress-pct">0%</span>
+        </div>
+        <div class="upload-progress-track">
+            <div id="upload-progress-bar" class="upload-progress-bar" style="width: 0%"></div>
         </div>
     </div>
 

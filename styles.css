@@ -1,33 +1,150 @@
+/* Inter font (self-hosted) */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('vendor/fonts/inter-400.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('vendor/fonts/inter-500.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('vendor/fonts/inter-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('vendor/fonts/inter-700.woff2') format('woff2');
+}
+
 :root {
-    --background-color: #f5f5f7;
+    --background-color: #f7f5f1;
     --surface-color: #ffffff;
-    --text-color: #1f1f1f;
-    --muted-text-color: #555555;
-    --primary-color: #3a86ff;
-    --primary-hover: #2c6ddf;
-    --border-color: #e4e4e7;
-    --shadow-color: rgba(15, 23, 42, 0.12);
+    --surface-hover: #fbfaf7;
+    --text-color: #2b2622;
+    --muted-text-color: #7d766c;
+    --primary-color: #0f766e;
+    --primary-hover: #115e59;
+    --primary-soft: rgba(15, 118, 110, 0.12);
+    --primary-soft-strong: rgba(15, 118, 110, 0.2);
+    --primary-glow: rgba(15, 118, 110, 0.28);
+    --border-color: #e7e2da;
+    --shadow-color: rgba(43, 38, 34, 0.08);
+    --neutral-soft: rgba(43, 38, 34, 0.06);
+    --success: #15803d;
+    --success-soft: rgba(21, 128, 61, 0.12);
+    --warning: #b45309;
+    --warning-soft: rgba(180, 83, 9, 0.12);
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.12);
+    --bg-glow: rgba(15, 118, 110, 0.05);
+    --reader-bg: #12100d;
+    --toast-bg: #211d18;
+    --toast-text: #f3efe9;
 }
 
 body.dark {
-    --background-color: #111927;
-    --surface-color: #1f2937;
-    --text-color: #f9fafb;
-    --muted-text-color: #cbd5f5;
-    --primary-color: #60a5fa;
-    --primary-hover: #3b82f6;
-    --border-color: #374151;
-    --shadow-color: rgba(0, 0, 0, 0.4);
+    --background-color: #16130f;
+    --surface-color: #211d18;
+    --surface-hover: #27221c;
+    --text-color: #f3efe9;
+    --muted-text-color: #a39a8e;
+    --primary-color: #2dd4bf;
+    --primary-hover: #5eead4;
+    --primary-soft: rgba(45, 212, 191, 0.14);
+    --primary-soft-strong: rgba(45, 212, 191, 0.24);
+    --primary-glow: rgba(45, 212, 191, 0.3);
+    --border-color: #37322b;
+    --shadow-color: rgba(0, 0, 0, 0.45);
+    --neutral-soft: rgba(255, 255, 255, 0.07);
+    --success: #4ade80;
+    --success-soft: rgba(74, 222, 128, 0.14);
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.14);
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.14);
+    --bg-glow: rgba(45, 212, 191, 0.04);
+    --reader-bg: #0f0d0b;
+    --toast-bg: #2b2621;
+    --toast-text: #f3efe9;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
 }
 
 body {
     margin: 0;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--background-color);
+    background:
+        radial-gradient(1100px 480px at 50% -12%, var(--bg-glow), transparent 65%),
+        var(--background-color);
     color: var(--text-color);
     min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     transition: background 0.3s ease, color 0.3s ease;
 }
+
+::selection {
+    background: var(--primary-soft-strong);
+}
+
+:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--neutral-soft);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-soft-strong);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+input,
+select,
+textarea,
+button {
+    font-family: inherit;
+}
+
+/* ---------- Auth ---------- */
 
 .auth-container,
 .modal {
@@ -36,38 +153,42 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(4px);
+    background: rgba(18, 16, 13, 0.5);
+    backdrop-filter: blur(6px);
     z-index: 1000;
 }
 
 .auth-box,
 .modal-content {
     background: var(--surface-color);
-    border-radius: 16px;
-    box-shadow: 0 20px 45px var(--shadow-color);
-    padding: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: 0 24px 60px var(--shadow-color);
+    padding: 36px;
     width: min(440px, calc(100% - 32px));
     animation: slideUp 0.35s ease;
 }
 
 .auth-box h1 {
     margin: 0;
-    font-size: 28px;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     text-align: center;
 }
 
 .auth-subtitle {
     text-align: center;
     color: var(--muted-text-color);
-    margin-bottom: 24px;
+    margin: 8px 0 28px;
+    font-size: 15px;
 }
 
 .auth-hint {
     text-align: center;
     color: var(--muted-text-color);
     font-size: 14px;
-    margin-top: 16px;
+    margin-top: 20px;
 }
 
 .auth-hint .auth-toggle-link {
@@ -79,10 +200,11 @@ body {
     font-weight: 600;
     cursor: pointer;
     text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 .auth-error {
-    color: #ef4444;
+    color: var(--danger);
     font-size: 14px;
     text-align: center;
     margin: 0 0 16px;
@@ -95,172 +217,84 @@ body {
 #login-form .form-group input {
     width: 100%;
     box-sizing: border-box;
+    background: var(--background-color);
 }
 
-.tab-bar {
-    display: inline-flex;
-    background: rgba(58, 134, 255, 0.08);
-    border-radius: 10px;
-    padding: 4px;
-    gap: 4px;
-}
+/* ---------- Buttons ---------- */
 
-.tab-btn {
+.btn {
     border: none;
-    background: transparent;
-    color: var(--muted-text-color);
-    font-size: 14px;
+    border-radius: 12px;
+    padding: 10px 18px;
+    font-size: 14.5px;
     font-weight: 600;
-    padding: 8px 14px;
-    border-radius: 8px;
     cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease;
-}
-
-.tab-btn.active {
-    background: var(--surface-color);
-    color: var(--text-color);
-    box-shadow: 0 2px 8px var(--shadow-color);
-}
-
-.pdf-card {
-    display: flex;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease, color 0.2s ease;
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    background: var(--surface-color);
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 10px 25px var(--shadow-color);
-    cursor: pointer;
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-    flex-wrap: wrap;
-}
-
-.pdf-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 14px 30px var(--shadow-color);
-}
-
-.pdf-card-info {
-    flex: 1;
-    min-width: 220px;
-}
-
-.pdf-card-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-}
-
-.pdf-card-icon {
-    font-size: 22px;
-}
-
-.pdf-card-title {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pdf-card-meta {
-    color: var(--muted-text-color);
-    font-size: 13px;
-    margin-bottom: 10px;
-}
-
-.pdf-progress {
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(58, 134, 255, 0.12);
-    overflow: hidden;
-    max-width: 420px;
-}
-
-.pdf-progress-bar {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
-    transition: width 0.3s ease;
-}
-
-.pdf-card-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.pdf-reader-modal {
-    padding: 0;
-    align-items: stretch;
-    flex-direction: column;
-    background: #1a1d24;
-}
-
-.pdf-reader-modal .pdf-reader-header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 16px;
-    background: var(--surface-color);
-    border-bottom: 1px solid var(--border-color);
-    flex-wrap: wrap;
-    flex-shrink: 0;
-}
-
-.pdf-reader-title {
-    font-weight: 700;
-    font-size: 15px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 120px;
-}
-
-.pdf-reader-page-label {
-    color: var(--muted-text-color);
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.pdf-reader-controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.pdf-reader-body {
-    flex: 1;
-    overflow: auto;
-    display: flex;
     justify-content: center;
-    padding: 20px;
-    background: #1a1d24;
+    gap: 8px;
+    white-space: nowrap;
+    user-select: none;
 }
 
-.pdf-reader-body canvas {
-    background: #ffffff;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-    max-width: 100%;
-    height: auto;
+.btn.is-loading,
+.btn:disabled {
+    opacity: 0.55;
+    cursor: wait;
+    pointer-events: none;
 }
 
-body.dark .pdf-reader-modal,
-body.dark .pdf-reader-body {
-    background: #0d1117;
+.btn-primary {
+    background: var(--primary-color);
+    color: #fff;
+    box-shadow: 0 8px 20px var(--primary-glow);
 }
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px var(--primary-glow);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background: var(--primary-soft);
+    color: var(--primary-color);
+}
+
+.btn-secondary:hover {
+    background: var(--primary-soft-strong);
+}
+
+.btn-icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--neutral-soft);
+    color: var(--text-color);
+    font-size: 16px;
+}
+
+.btn-icon:hover {
+    background: var(--primary-soft);
+    color: var(--primary-color);
+}
+
+.btn-icon .icon {
+    pointer-events: none;
+}
+
+/* ---------- App layout ---------- */
 
 .app-container {
-    max-width: 1200px;
+    max-width: 1160px;
     margin: 0 auto;
-    padding: 24px;
+    padding: 28px 24px 64px;
 }
 
 .app-header {
@@ -275,8 +309,9 @@ body.dark .pdf-reader-body {
 
 .app-title {
     margin: 0;
-    font-size: 32px;
+    font-size: 30px;
     font-weight: 700;
+    letter-spacing: -0.03em;
 }
 
 .header-actions {
@@ -290,43 +325,32 @@ body.dark .pdf-reader-body {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 7px 14px;
     border-radius: 999px;
     font-size: 13px;
     font-weight: 600;
-    background: rgba(58, 134, 255, 0.1);
+    background: var(--primary-soft);
     color: var(--primary-color);
 }
 
 .sync-status.synced {
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    background: var(--success-soft);
+    color: var(--success);
 }
 
 .sync-status.syncing {
-    background: rgba(251, 191, 36, 0.1);
-    color: #fbbf24;
+    background: var(--warning-soft);
+    color: var(--warning);
 }
 
-.sync-status.offline {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-}
-
+.sync-status.offline,
 .sync-status.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 .sync-status .sync-icon {
     font-size: 14px;
-}
-
-.sync-status .sync-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
 }
 
 .sync-status.syncing .sync-icon {
@@ -334,75 +358,21 @@ body.dark .pdf-reader-body {
 }
 
 @keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
-.btn {
-    border: none;
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn.is-loading,
-.btn:disabled {
-    opacity: 0.6;
-    cursor: wait;
-    pointer-events: none;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
-    color: #fff;
-    box-shadow: 0 12px 25px rgba(58, 134, 255, 0.25);
-}
-
-.btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 32px rgba(58, 134, 255, 0.3);
-}
-
-.btn-secondary {
-    background: rgba(58, 134, 255, 0.12);
-    color: var(--primary-color);
-}
-
-.btn-secondary:hover {
-    background: rgba(58, 134, 255, 0.2);
-}
-
-.btn-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: rgba(58, 134, 255, 0.12);
-    font-size: 18px;
-}
-
-.btn-icon .icon {
-    pointer-events: none;
-}
+/* ---------- Toolbar ---------- */
 
 .toolbar {
     background: var(--surface-color);
-    border-radius: 18px;
-    padding: 16px;
-    box-shadow: 0 16px 35px var(--shadow-color);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 14px 16px;
+    box-shadow: 0 10px 30px var(--shadow-color);
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 14px;
     align-items: center;
     justify-content: space-between;
 }
@@ -410,7 +380,7 @@ body.dark .pdf-reader-body {
 .toolbar-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
@@ -419,29 +389,67 @@ body.dark .pdf-reader-body {
     min-width: 220px;
 }
 
-.search-input {
+.search-input,
+.filter-select {
     width: 100%;
-    padding: 12px 14px;
+    padding: 11px 14px;
     border-radius: 12px;
     border: 1px solid var(--border-color);
     background: var(--surface-color);
     color: inherit;
-    font-size: 15px;
+    font-size: 14.5px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-input::placeholder {
+    color: var(--muted-text-color);
+    opacity: 0.8;
+}
+
+.search-input:focus,
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 .filter-select {
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    background: var(--surface-color);
-    color: inherit;
-    font-size: 15px;
+    width: auto;
+    cursor: pointer;
 }
 
+.tab-bar {
+    display: inline-flex;
+    background: var(--neutral-soft);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.tab-btn {
+    border: none;
+    background: transparent;
+    color: var(--muted-text-color);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tab-btn.active {
+    background: var(--surface-color);
+    color: var(--text-color);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+/* ---------- Notes grid ---------- */
+
 .notes-container {
-    margin-top: 28px;
+    margin-top: 24px;
     display: grid;
-    gap: 12px;
+    gap: 14px;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     align-items: start;
 }
@@ -452,13 +460,13 @@ body.dark .pdf-reader-body {
 
 .note-card {
     background: var(--surface-color);
-    border-radius: 16px;
-    padding: 16px 20px;
     border: 1px solid var(--border-color);
-    box-shadow: 0 4px 12px var(--shadow-color);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
-                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
-                padding 0.25s ease, 
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 4px 14px var(--shadow-color);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.25s ease,
                 border-color 0.25s ease;
     position: relative;
     display: flex;
@@ -468,18 +476,19 @@ body.dark .pdf-reader-body {
 }
 
 .note-card:hover {
-    box-shadow: 0 8px 24px var(--shadow-color);
+    box-shadow: 0 10px 26px var(--shadow-color);
+    background: var(--surface-hover);
 }
 
 .note-card.expanded {
-    padding: 20px;
-    box-shadow: 0 16px 32px var(--shadow-color);
-    border-color: transparent;
+    padding: 18px 20px;
+    border-color: var(--primary-soft-strong);
+    box-shadow: 0 14px 34px var(--shadow-color);
 }
 
 .note-card.is-inline-editing {
-    border-color: rgba(58, 134, 255, 0.4);
-    box-shadow: 0 20px 45px rgba(58, 134, 255, 0.16);
+    border-color: var(--primary-color);
+    box-shadow: 0 16px 40px var(--primary-glow);
 }
 
 .note-card.is-inline-editing .note-title {
@@ -488,7 +497,6 @@ body.dark .pdf-reader-body {
 
 .note-card.expanded:hover {
     transform: translateY(-2px);
-    box-shadow: 0 20px 50px rgba(58, 134, 255, 0.2);
 }
 
 .note-header {
@@ -507,8 +515,9 @@ body.dark .pdf-reader-body {
 
 .note-title {
     margin: 0;
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 16.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     flex: 1;
     line-height: 1.35;
 }
@@ -521,8 +530,8 @@ body.dark .pdf-reader-body {
     transform: translateY(-50%);
     width: 100%;
     padding: 6px 8px;
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 16.5px;
+    font-weight: 600;
     border: 2px solid transparent;
     border-radius: 8px;
     background: transparent;
@@ -535,14 +544,14 @@ body.dark .pdf-reader-body {
 .note-card.is-inline-editing .inline-title-input {
     opacity: 1;
     pointer-events: auto;
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(58, 134, 255, 0.25);
+    background: var(--neutral-soft);
+    border-color: var(--primary-soft-strong);
 }
 
 .note-card.is-inline-editing .inline-title-input:focus {
     outline: none;
     border-color: var(--primary-color);
-    background: rgba(58, 134, 255, 0.08);
+    background: var(--primary-soft);
 }
 
 .note-card.is-inline-editing .note-title {
@@ -560,11 +569,11 @@ body.dark .pdf-reader-body {
 }
 
 .note-toggle {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     border: 1px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: 9px;
     background: transparent;
     color: var(--muted-text-color);
     cursor: pointer;
@@ -577,15 +586,15 @@ body.dark .pdf-reader-body {
 
 .note-toggle:hover,
 .note-toggle:focus-visible {
-    background: rgba(58, 134, 255, 0.12);
+    background: var(--primary-soft);
     border-color: var(--primary-color);
     color: var(--primary-color);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.15);
+    box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 .note-toggle:active {
-    transform: scale(0.95);
+    transform: scale(0.94);
 }
 
 .note-toggle-icon {
@@ -658,21 +667,21 @@ body.dark .pdf-reader-body {
 }
 
 .note-tag {
-    background: rgba(58, 134, 255, 0.15);
+    background: var(--primary-soft);
     color: var(--primary-color);
     padding: 4px 10px;
     border-radius: 999px;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
 .note-tag--category {
-    background: rgba(58, 134, 255, 0.22);
+    background: var(--primary-soft-strong);
 }
 
 .note-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
@@ -680,42 +689,80 @@ body.dark .pdf-reader-body {
 
 .note-actions button {
     padding: 8px 12px;
-    border-radius: 9px;
+    border-radius: 10px;
     border: none;
     cursor: pointer;
-    background: rgba(58, 134, 255, 0.1);
-    color: var(--primary-color);
+    background: var(--neutral-soft);
+    color: var(--muted-text-color);
     font-weight: 600;
-    transition: background 0.2s ease;
+    font-size: 13.5px;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
 }
 
 .note-actions button:hover {
-    background: rgba(58, 134, 255, 0.18);
+    background: var(--primary-soft);
+    color: var(--primary-color);
+    transform: translateY(-1px);
 }
 
 .note-content {
     color: var(--text-color);
-    line-height: 1.6;
+    line-height: 1.65;
     white-space: pre-line;
     word-wrap: break-word;
+    font-size: 14.5px;
 }
 
 .note-card.collapsed .note-content {
     display: none;
 }
 
+.note-content img,
+.note-editor img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 8px 0;
+    display: block;
+    box-shadow: 0 3px 10px var(--shadow-color);
+}
+
+/* ---------- Empty state ---------- */
+
 .empty-state {
     text-align: center;
     padding: 64px 24px;
     background: var(--surface-color);
+    border: 1px dashed var(--border-color);
     border-radius: 20px;
-    box-shadow: 0 18px 45px var(--shadow-color);
+}
+
+.empty-state h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.empty-state p {
+    margin: 0;
+    color: var(--muted-text-color);
+    font-size: 14.5px;
 }
 
 .empty-icon {
-    font-size: 46px;
+    font-size: 44px;
     margin-bottom: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: var(--neutral-soft);
 }
+
+/* ---------- Forms / editors ---------- */
 
 .form-group {
     display: flex;
@@ -732,6 +779,14 @@ body.dark .pdf-reader-body {
     background: transparent;
     color: inherit;
     font-size: 15px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 .note-editor-group {
@@ -767,11 +822,11 @@ body.dark .pdf-reader-body {
 }
 
 .note-editor-status--error {
-    color: #ef4444;
+    color: var(--danger);
 }
 
 .note-editor-status--success {
-    color: #22c55e;
+    color: var(--success);
 }
 
 .note-editor-status--info {
@@ -795,18 +850,18 @@ body.dark .pdf-reader-body {
 }
 
 .auto-save-status.saving {
-    background: rgba(251, 191, 36, 0.1);
-    color: #fbbf24;
+    background: var(--warning-soft);
+    color: var(--warning);
 }
 
 .auto-save-status.saved {
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    background: var(--success-soft);
+    color: var(--success);
 }
 
 .auto-save-status.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 .auto-save-status .status-icon {
@@ -824,10 +879,10 @@ body.dark .pdf-reader-body {
     padding: 12px 14px;
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    background: transparent;
+    background: var(--background-color);
     color: inherit;
     font-size: 15px;
-    line-height: 1.6;
+    line-height: 1.65;
     white-space: pre-wrap;
     word-wrap: break-word;
     position: relative;
@@ -836,31 +891,13 @@ body.dark .pdf-reader-body {
 .note-editor:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.15);
+    box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 .note-editor:empty::before {
     content: attr(data-placeholder);
     color: var(--muted-text-color);
     pointer-events: none;
-}
-
-.note-editor img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 8px;
-    margin: 8px 0;
-    display: block;
-    box-shadow: 0 2px 8px var(--shadow-color);
-}
-
-.note-content img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 8px;
-    margin: 8px 0;
-    display: block;
-    box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .inline-note-editor {
@@ -870,17 +907,19 @@ body.dark .pdf-reader-body {
     padding: 10px 12px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     background: transparent;
+    font-size: 14.5px;
+    line-height: 1.65;
 }
 
 .inline-note-editor[contenteditable="true"] {
-    background: rgba(58, 134, 255, 0.06);
-    border-color: rgba(58, 134, 255, 0.35);
+    background: var(--neutral-soft);
+    border-color: var(--primary-soft-strong);
 }
 
 .inline-note-editor[contenteditable="true"]:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.15);
+    box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 .inline-note-editor:empty::before {
@@ -918,18 +957,18 @@ body.dark .pdf-reader-body {
 }
 
 .inline-auto-save-status.saving {
-    background: rgba(251, 191, 36, 0.1);
-    color: #fbbf24;
+    background: var(--warning-soft);
+    color: var(--warning);
 }
 
 .inline-auto-save-status.saved {
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    background: var(--success-soft);
+    color: var(--success);
 }
 
 .inline-auto-save-status.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 .inline-auto-save-status .status-icon {
@@ -946,7 +985,8 @@ body.dark .pdf-reader-body {
 }
 
 .inline-save-btn:hover {
-    background: rgba(34, 197, 94, 0.18) !important;
+    background: var(--success-soft) !important;
+    color: var(--success) !important;
 }
 
 .inline-field-row {
@@ -975,14 +1015,14 @@ body.dark .pdf-reader-body {
 }
 
 .note-card.is-inline-editing .inline-category-input {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(58, 134, 255, 0.25);
+    background: var(--neutral-soft);
+    border-color: var(--primary-soft-strong);
 }
 
 .note-card.is-inline-editing .inline-category-input:focus {
     outline: none;
     border-color: var(--primary-color);
-    background: rgba(58, 134, 255, 0.08);
+    background: var(--primary-soft);
 }
 
 .inline-category-field {
@@ -1003,6 +1043,8 @@ body.dark .pdf-reader-body {
     gap: 12px;
 }
 
+/* ---------- Modals ---------- */
+
 .modal {
     display: none;
 }
@@ -1018,31 +1060,24 @@ body.dark .pdf-reader-body {
     margin-bottom: 18px;
 }
 
+.modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+}
+
 .modal-close {
     border: none;
     background: transparent;
-    font-size: 28px;
+    font-size: 26px;
     cursor: pointer;
     color: var(--muted-text-color);
+    transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.toast-container {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    display: grid;
-    gap: 12px;
-    z-index: 2000;
-}
-
-.toast {
-    background: var(--surface-color);
-    color: var(--text-color);
-    border-radius: 12px;
-    padding: 12px 16px;
-    box-shadow: 0 18px 40px var(--shadow-color);
-    animation: slideLeft 0.35s ease;
-    min-width: 240px;
+.modal-close:hover {
+    color: var(--danger);
+    transform: rotate(90deg);
 }
 
 .archived-notes-list {
@@ -1055,8 +1090,9 @@ body.dark .pdf-reader-body {
 
 .archived-note-card {
     padding: 16px;
-    border-radius: 12px;
-    background: rgba(58, 134, 255, 0.08);
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--background-color);
 }
 
 .migration-content {
@@ -1066,14 +1102,15 @@ body.dark .pdf-reader-body {
 
 .migration-content h3 {
     margin: 0 0 16px 0;
-    font-size: 22px;
+    font-size: 21px;
+    letter-spacing: -0.01em;
     color: var(--text-color);
 }
 
 .migration-content p {
     color: var(--muted-text-color);
     margin-bottom: 24px;
-    line-height: 1.6;
+    line-height: 1.65;
 }
 
 .migration-content .migration-actions {
@@ -1082,6 +1119,226 @@ body.dark .pdf-reader-body {
     justify-content: center;
     flex-wrap: wrap;
 }
+
+/* ---------- Toasts ---------- */
+
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: grid;
+    gap: 12px;
+    z-index: 2000;
+}
+
+.toast {
+    background: var(--toast-bg);
+    color: var(--toast-text);
+    border-radius: 12px;
+    padding: 12px 18px;
+    box-shadow: 0 18px 44px var(--shadow-color);
+    animation: slideLeft 0.35s ease;
+    min-width: 240px;
+    max-width: 360px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+}
+
+/* ---------- PDF library ---------- */
+
+.pdf-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 4px 14px var(--shadow-color);
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.2s ease;
+    flex-wrap: wrap;
+}
+
+.pdf-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px var(--shadow-color);
+    background: var(--surface-hover);
+}
+
+.pdf-card-info {
+    flex: 1;
+    min-width: 220px;
+}
+
+.pdf-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.pdf-card-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.pdf-card-title {
+    margin: 0;
+    font-size: 15.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pdf-card-meta {
+    color: var(--muted-text-color);
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.pdf-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    overflow: hidden;
+    max-width: 420px;
+}
+
+.pdf-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+    transition: width 0.3s ease;
+}
+
+.pdf-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ---------- PDF reader ---------- */
+
+.pdf-reader-modal {
+    padding: 0;
+    align-items: stretch;
+    flex-direction: column;
+    background: var(--reader-bg);
+    backdrop-filter: none;
+}
+
+.pdf-reader-modal .pdf-reader-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.pdf-reader-title {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 120px;
+}
+
+.pdf-reader-page-label {
+    color: var(--muted-text-color);
+    font-size: 13.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.pdf-reader-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.pdf-reader-body {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+    background: var(--reader-bg);
+}
+
+.pdf-reader-body canvas {
+    background: #ffffff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* ---------- Upload progress ---------- */
+
+.upload-progress {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(420px, calc(100% - 32px));
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 16px 44px var(--shadow-color);
+    z-index: 1100;
+    animation: slideUp 0.25s ease;
+}
+
+.upload-progress-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.upload-progress-info #upload-progress-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.upload-progress-info #upload-progress-pct {
+    color: var(--primary-color);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-track {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    overflow: hidden;
+}
+
+.upload-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+    transition: width 0.2s ease;
+}
+
+/* ---------- Keyframes ---------- */
 
 @keyframes slideUp {
     from {
@@ -1105,9 +1362,11 @@ body.dark .pdf-reader-body {
     }
 }
 
+/* ---------- Responsive ---------- */
+
 @media (max-width: 768px) {
     .app-container {
-        padding: 16px;
+        padding: 16px 14px 48px;
     }
 
     .toolbar {
@@ -1133,7 +1392,7 @@ body.dark .pdf-reader-body {
     }
 
     .note-title {
-        font-size: 16px;
+        font-size: 15.5px;
     }
 
     .note-toggle {
@@ -1151,5 +1410,16 @@ body.dark .pdf-reader-body {
     .note-actions button {
         width: 100%;
         justify-content: center;
+    }
+
+    .toast-container {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+    }
+
+    .toast {
+        min-width: 0;
+        max-width: none;
     }
 }

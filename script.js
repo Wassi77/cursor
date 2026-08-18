@@ -991,10 +991,10 @@ function showArchivedNotes() {
                 ${escapeHtml((note.plainContent || extractPlainTextFromHtml(note.content)).substring(0, 100))}...
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button onclick="toggleArchive('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: rgba(58, 134, 255, 0.1); color: var(--primary-color); font-weight: 600;">
+                <button onclick="toggleArchive('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: var(--primary-soft); color: var(--primary-color); font-weight: 600;">
                     📤 Unarchive
                 </button>
-                <button onclick="deleteNote('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: rgba(239, 68, 68, 0.1); color: #ef4444; font-weight: 600;">
+                <button onclick="deleteNote('${note.id}')" style="padding: 8px 12px; border-radius: 9px; border: none; cursor: pointer; background: var(--danger-soft); color: var(--danger); font-weight: 600;">
                     🗑️ Delete
                 </button>
             </div>
@@ -1124,11 +1124,11 @@ function renderNotes() {
                     <div class="note-content inline-note-editor" contenteditable="${isExpanded ? 'true' : 'false'}" data-placeholder="Write your note here..."></div>
                 </div>
                 <div class="note-actions">
-                    <button class="inline-save-btn" data-note-id="${note.id}" style="display: none; background: rgba(34, 197, 94, 0.1); color: #22c55e;">💾 Save</button>
+                    <button class="inline-save-btn" data-note-id="${note.id}" style="display: none; background: var(--success-soft); color: var(--success);">💾 Save</button>
                     <button onclick="togglePin('${note.id}')">${note.isPinned ? '📌 Unpin' : '📍 Pin'}</button>
                     <button onclick="toggleArchive('${note.id}')">📦 Archive</button>
                     <button onclick="downloadNote('${note.id}')">💾 Download</button>
-                    <button onclick="deleteNote('${note.id}')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🗑️ Delete</button>
+                    <button onclick="deleteNote('${note.id}')" style="background: var(--danger-soft); color: var(--danger);">🗑️ Delete</button>
                 </div>
             </div>
         `;
