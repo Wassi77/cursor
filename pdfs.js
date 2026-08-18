@@ -304,13 +304,13 @@ async function handlePdfUpload(event) {
     let storagePath = '';
 
     // Try cloud storage first. NOTE: Firebase Cloud Storage now requires a
-    // paid (Blaze) plan, so on the free plan this will fail and we fall back
-    // to saving the file in this browser (IndexedDB) for free.
+    // paid (Blaze) plan, so on the free plan this will either fail or hang.
+    // We fall back to saving the file in this browser (IndexedDB) for free.
     try {
         if (!storage) throw new Error('Cloud storage not configured');
         const ref = storage.ref('pdfs').child(uid).child(fileName);
         storagePath = ref.fullPath;
-        storageUrl = await new Promise((resolve, reject) => {
+        const cloudPromise = new Promise((resolve, reject) => {
             const task = ref.put(file);
             task.on('state_changed',
                 (snapshot) => updateUploadProgress(snapshot.bytesTransferred / snapshot.totalBytes),
@@ -318,8 +318,14 @@ async function handlePdfUpload(event) {
                 () => resolve(task.snapshot.ref.getDownloadURL())
             );
         });
+        // If cloud storage stalls (common on the free plan), fall back to local
+        // storage instead of leaving the progress bar stuck at 0%.
+        storageUrl = await Promise.race([
+            cloudPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud upload timed out (free Starter plan needs paid Blaze for storage).')), 8000))
+        ]);
     } catch (cloudError) {
-        console.warn('Cloud upload failed; saving locally instead:', cloudError);
+        console.warn('Cloud upload unavailable; saving locally instead:', cloudError);
         try {
             showUploadProgress(`Saving ${file.name} on this device…`);
             const localKey = `${uid}/${fileName}`;
