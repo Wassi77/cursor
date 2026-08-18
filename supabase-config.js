@@ -8,8 +8,8 @@
 //   4. Copy the "anon" / "public" key into the `anonKey` field.
 //   5. Set up the storage bucket + policies (see setup instructions).
 const supabaseConfig = {
-  url: "https://YOUR-PROJECT-REF.supabase.co",
-  anonKey: "YOUR-ANON-PUBLIC-KEY"
+  url: "https://aaqicrmgkvfsjoacleed.supabase.co",
+  anonKey: "sb_publishable_htCSYw236r3qe5HSD820Og_VshrW467"
 };
 
 // Export the config
