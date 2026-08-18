@@ -153,8 +153,12 @@ async function init() {
     const initialized = await initializeFirebase();
     if (initialized) {
         auth.onAuthStateChanged((user) => {
-            if (user) {
+            if (user && !user.isAnonymous) {
                 showApp();
+            } else if (user && user.isAnonymous) {
+                // Stale anonymous session from the old version - clear it and require a real login
+                auth.signOut();
+                showLogin();
             } else {
                 showLogin();
             }
@@ -619,7 +623,11 @@ function startRealtimeSync() {
                 }
             }, (error) => {
                 console.error('Firestore listener error:', error);
-                showToast('Sync error: ' + error.message, 'error');
+                if (error && (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED')) {
+                    showToast('Sync blocked: Firestore security rules need updating in the Firebase console.', 'error');
+                } else {
+                    showToast('Sync error: ' + (error.message || 'Unknown error'), 'error');
+                }
                 updateSyncStatus('error');
             });
     } catch (error) {
