@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isEmailUser() {
+      return signedIn() && request.auth.token.email != null;
+    }
+    function isOwner(uid) {
+      return isEmailUser() && request.auth.uid == uid;
+    }
+
+    // Personal notes: only the signed-in account owner can access their own data.
+    // Anonymous users are explicitly excluded (email must be present on the token).
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /notes/{noteId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Legacy shared collection from before the security upgrade.
+    // Kept readable/writable by email-authenticated users only, so the owner
+    // can run the one-time migration and clean it up afterwards.
+    // After migrating your notes, replace isEmailUser() below with
+    //   request.auth.uid == "YOUR_FIREBASE_UID"
+    // to lock the legacy collection to you alone.
+    match /notes/{noteId} {
+      allow read, write: if isEmailUser();
+    }
+
+    // Deny access to everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
