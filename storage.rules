@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Only email-authenticated users, and only their own image folder.
+    // Files are stored under images/{uid}/...
+    match /images/{uid}/{fileName} {
+      allow read: if request.auth.token.email != null && request.auth.uid == uid;
+
+      // Uploads: real image files, max 5 MB
+      allow create: if request.auth.token.email != null
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|jpg|gif|webp)');
+
+      allow update, delete: if request.auth.token.email != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else (including listing other users' files)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

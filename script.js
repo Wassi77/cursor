@@ -1,6 +1,7 @@
 // Firebase and Database State
 let db = null;
 let auth = null;
+let storage = null;
 let unsubscribeListener = null;
 let offlineNotified = false;
 let authMode = 'login';
@@ -208,6 +209,7 @@ async function initializeFirebase() {
 
         const firestoreInstance = firebase.firestore();
         auth = firebase.auth();
+        storage = firebase.storage();
 
         // Enable offline persistence
         try {
@@ -814,6 +816,24 @@ function closeArchivedModal() {
     elements.archivedModal.classList.remove('open');
 }
 
+async function deleteStorageImagesFromHtml(html) {
+    if (!storage || !html) return;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const urls = Array.from(tempDiv.querySelectorAll('img[src^="https://firebasestorage.googleapis.com/"]'))
+        .map(img => img.getAttribute('src'))
+        .filter(Boolean);
+
+    await Promise.all(urls.map(async (url) => {
+        try {
+            const path = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
+            await storage.ref(path).delete();
+        } catch (error) {
+            console.warn('Failed to delete stored image:', error.message);
+        }
+    }));
+}
+
 async function deleteNote(noteId) {
     if (!confirm('Are you sure you want to delete this note?')) {
         return;
@@ -824,12 +844,16 @@ async function deleteNote(noteId) {
         return;
     }
 
+    const note = notes.find(n => n.id === noteId);
     const col = notesCol();
     if (!col) return;
 
     try {
         updateSyncStatus('syncing');
         await col.doc(noteId).delete();
+        if (note) {
+            await deleteStorageImagesFromHtml(note.content);
+        }
         showToast('Note deleted 🗑️');
     } catch (error) {
         console.error('Delete note error:', error);
@@ -1286,20 +1310,36 @@ function validateImageFile(file) {
     return true;
 }
 
+async function uploadImage(file) {
+    if (!storage || !auth || !auth.currentUser) {
+        throw new Error('Storage not available');
+    }
+    const ext = ((file.name || '').split('.').pop() || 'png').toLowerCase();
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+    const ref = storage.ref('images').child(auth.currentUser.uid).child(fileName);
+    await ref.put(file);
+    return ref.getDownloadURL();
+}
+
 async function processImage(file) {
     try {
         setEditorProcessing(true);
-        showEditorStatus('Adding image...', 'info');
+        showEditorStatus('Uploading image...', 'info');
 
-        const dataUrl = await readFileAsDataURL(file);
-        insertImageIntoEditor(dataUrl, file.name);
+        const url = await uploadImage(file);
+        insertImageIntoEditor(url, file.name);
 
         showToast('Image added to note 🖼️');
         showEditorStatus(`Image added (${formatFileSize(file.size)})`, 'success', 3200);
     } catch (error) {
         console.error('Image processing error:', error);
-        showEditorStatus('Failed to add image', 'error', 4000);
-        showToast('Failed to add image', 'error');
+        if (error && (error.code === 'storage/unauthorized' || error.code === 'permission-denied')) {
+            showEditorStatus('Upload blocked: storage rules need updating in the Firebase console.', 'error', 5000);
+            showToast('Upload blocked: storage rules need updating in the Firebase console.', 'error');
+        } else {
+            showEditorStatus('Failed to add image', 'error', 4000);
+            showToast('Failed to add image: ' + (error.message || 'Unknown error'), 'error');
+        }
     } finally {
         setEditorProcessing(false);
     }
@@ -1317,21 +1357,6 @@ function setEditorProcessing(isProcessing) {
         elements.uploadImageBtn.removeAttribute('aria-busy');
         elements.uploadImageBtn.disabled = false;
     }
-}
-
-function readFileAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (typeof reader.result === 'string') {
-                resolve(reader.result);
-            } else {
-                reject(new Error('Invalid file result'));
-            }
-        };
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-    });
 }
 
 function insertImageIntoEditor(dataUrl, fileName = '') {
@@ -1491,8 +1516,12 @@ function sanitizeNoteContent(html) {
                 return;
             }
 
-            if (tagName === 'img' && attrName === 'src' && !/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(attr.value)) {
-                node.remove();
+            if (tagName === 'img' && attrName === 'src') {
+                const isInlineImage = /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(attr.value);
+                const isStorageImage = attr.value.startsWith('https://firebasestorage.googleapis.com/');
+                if (!isInlineImage && !isStorageImage) {
+                    node.remove();
+                }
             }
 
             if (tagName === 'img' && (attrName === 'alt' || attrName === 'title')) {
@@ -1985,17 +2014,22 @@ async function processInlineImage(file, editor, card) {
             uploadBtn.classList.add('is-loading');
         }
         
-        showInlineEditorStatus(statusElement, 'Adding image...', 'info');
+        showInlineEditorStatus(statusElement, 'Uploading image...', 'info');
 
-        const dataUrl = await readFileAsDataURL(file);
-        insertImageIntoInlineEditor(dataUrl, file.name, editor);
+        const url = await uploadImage(file);
+        insertImageIntoInlineEditor(url, file.name, editor);
 
         showToast('Image added to note 🖼️');
         showInlineEditorStatus(statusElement, `Image added (${formatFileSize(file.size)})`, 'success', 3200);
     } catch (error) {
         console.error('Image processing error:', error);
-        showInlineEditorStatus(statusElement, 'Failed to add image', 'error', 4000);
-        showToast('Failed to add image', 'error');
+        if (error && (error.code === 'storage/unauthorized' || error.code === 'permission-denied')) {
+            showInlineEditorStatus(statusElement, 'Upload blocked: storage rules need updating in the Firebase console.', 'error', 5000);
+            showToast('Upload blocked: storage rules need updating in the Firebase console.', 'error');
+        } else {
+            showInlineEditorStatus(statusElement, 'Failed to add image', 'error', 4000);
+            showToast('Failed to add image: ' + (error.message || 'Unknown error'), 'error');
+        }
     } finally {
         if (uploadBtn) {
             uploadBtn.disabled = false;
