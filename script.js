@@ -23,6 +23,18 @@ const MAX_IMAGE_SIZE = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 let editorStatusTimeoutId = null;
 const inlineEditorStatusTimers = new WeakMap();
 
+// Supabase cloud storage (free) — used for PDFs and note images.
+// Initialised here so both script.js and pdfs.js can share it.
+window.__supabase = null;
+if (window.supabase && window.supabaseConfig && window.supabaseConfig.url && window.supabaseConfig.anonKey) {
+    try {
+        window.__supabase = window.supabase.createClient(window.supabaseConfig.url, window.supabaseConfig.anonKey);
+    } catch (e) {
+        console.warn('Supabase init failed; files will not sync to cloud.', e);
+        window.__supabase = null;
+    }
+}
+
 const elements = {
     loginScreen: document.getElementById('login-screen'),
     loginForm: document.getElementById('login-form'),
@@ -819,17 +831,25 @@ function closeArchivedModal() {
 }
 
 async function deleteStorageImagesFromHtml(html) {
-    if (!storage || !html) return;
+    if (!html) return;
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
-    const urls = Array.from(tempDiv.querySelectorAll('img[src^="https://firebasestorage.googleapis.com/"]'))
+    const urls = Array.from(tempDiv.querySelectorAll('img[src^="https://"]'))
         .map(img => img.getAttribute('src'))
-        .filter(Boolean);
+        .filter(src => src && (src.includes('firebasestorage.googleapis.com') || src.includes('/storage/v1/object/public/')));
 
     await Promise.all(urls.map(async (url) => {
         try {
-            const path = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
-            await storage.ref(path).delete();
+            if (url.includes('/storage/v1/object/public/') && window.__supabase) {
+                // Supabase public URL: ...storage/v1/object/public/<bucket>/<path>
+                const relative = url.split('/storage/v1/object/public/')[1].split('?')[0];
+                const slash = relative.indexOf('/');
+                const path = slash >= 0 ? relative.slice(slash + 1) : relative;
+                await window.__supabase.storage.from('pdfs').remove([path]);
+            } else if (storage && url.includes('firebasestorage.googleapis.com')) {
+                const path = decodeURIComponent(url.split('/o/')[1].split('?')[0]);
+                await storage.ref(path).delete();
+            }
         } catch (error) {
             console.warn('Failed to delete stored image:', error.message);
         }
@@ -1313,14 +1333,37 @@ function validateImageFile(file) {
 }
 
 async function uploadImage(file) {
-    if (!storage || !auth || !auth.currentUser) {
-        throw new Error('Storage not available');
+    if (!auth || !auth.currentUser) {
+        throw new Error('Not signed in');
     }
     const ext = ((file.name || '').split('.').pop() || 'png').toLowerCase();
     const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
-    const ref = storage.ref('images').child(auth.currentUser.uid).child(fileName);
-    await ref.put(file);
-    return ref.getDownloadURL();
+    const path = `images/${auth.currentUser.uid}/${fileName}`;
+
+    // Cloud (Supabase free bucket) so images sync across devices.
+    const client = window.__supabase;
+    if (client) {
+        try {
+            const { error } = await client.storage.from('pdfs').upload(path, file, {
+                contentType: file.type || 'application/octet-stream',
+                upsert: true,
+                duplex: 'half'
+            });
+            if (!error) {
+                const { data } = client.storage.from('pdfs').getPublicUrl(path);
+                if (data && data.publicUrl) return data.publicUrl;
+            }
+        } catch (e) { /* fall through to legacy path */ }
+    }
+
+    // Fallback: legacy Firebase Storage (only works on a paid plan).
+    if (storage) {
+        const ref = storage.ref('images').child(auth.currentUser.uid).child(fileName);
+        await ref.put(file);
+        return ref.getDownloadURL();
+    }
+
+    throw new Error('Image upload not available');
 }
 
 async function processImage(file) {

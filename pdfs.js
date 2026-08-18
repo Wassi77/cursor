@@ -83,15 +83,7 @@ function localDeletePdf(key) {
 // This stores PDFs in a real cloud bucket so they sync across all devices.
 // If Supabase isn't configured or is unreachable, we fall back to saving the
 // file in the browser (IndexedDB) so uploads always still work.
-let supabaseClient = null;
-if (window.supabase && window.supabaseConfig && window.supabaseConfig.url && window.supabaseConfig.anonKey) {
-    try {
-        supabaseClient = window.supabase.createClient(window.supabaseConfig.url, window.supabaseConfig.anonKey);
-    } catch (e) {
-        console.warn('Supabase init failed; PDFs will be stored locally.', e);
-        supabaseClient = null;
-    }
-}
+let supabaseClient = window.__supabase || null;
 const SUPABASE_BUCKET = 'pdfs';
 
 function supabaseStoragePath(uid, fileName) {
@@ -403,7 +395,13 @@ async function handlePdfUpload(event) {
         } else {
             showToast('✅ Uploaded to cloud — opening…', 'success');
         }
-        openPdfReader(docRef.id);
+        openPdfReader(docRef.id, {
+            id: docRef.id,
+            title: file.name.replace(/\.pdf$/i, ''),
+            storageUrl,
+            storagePath,
+            lastPage: 0
+        });
     } catch (error) {
         hideUploadProgress();
         console.error('PDF metadata save error:', error);
@@ -428,8 +426,8 @@ async function countPdfPages(file) {
     }
 }
 
-async function openPdfReader(pdfId) {
-    const pdf = pdfs.find(p => p.id === pdfId);
+async function openPdfReader(pdfId, pdfOverride) {
+    const pdf = pdfOverride || pdfs.find(p => p.id === pdfId);
     if (!pdf || !pdf.storageUrl) {
         showToast('This document has no file attached.', 'error');
         return;
