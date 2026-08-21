@@ -47,11 +47,11 @@ function normalizeSessionBuddy(data, fileName) {
 
   const tabs = [];
   cols.forEach(col => {
-    const colTitle = col.title || col.name || fileName;
-    const wins = col.windows || col.tabs ? (col.windows || [{ tabs: col.tabs }]) : [];
-    wins.forEach(w => {
-      const list = w.tabs || w.pages || [];
-      list.forEach(t => {
+    const colTitle = col.title || col.name || fileName.replace(/\.json$/i,'');
+    const wins = col.folders || col.windows || (col.tabs ? [{ tabs: col.tabs }] : []);
+    (Array.isArray(wins) ? wins : []).forEach(w => {
+      const list = w.links || w.tabs || w.pages || [];
+      (Array.isArray(list) ? list : []).forEach(t => {
         const url = t.url || t.URL || t.link || '';
         if (!url) return;
         const title = t.title || t.name || url;
