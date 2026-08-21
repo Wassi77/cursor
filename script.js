@@ -396,6 +396,7 @@ async function handleLogout() {
     notes = [];
     categories = new Set();
     resetPdfs();
+    if (typeof resetTabs === 'function') resetTabs();
 
     // Close any open modals
     closeNoteModal();
@@ -445,6 +446,7 @@ async function showApp() {
     // Start listening to Firestore
     startRealtimeSync();
     startPdfsSync();
+    if (typeof startTabsSync === 'function') startTabsSync();
 }
 
 async function checkForMigration() {

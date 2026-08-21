@@ -23,6 +23,10 @@ service cloud.firestore {
       match /pdfs/{pdfId} {
         allow read, write: if isOwner(uid);
       }
+
+      match /tabImports/{importId} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // Legacy shared collection from before the security upgrade.

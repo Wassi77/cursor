@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const PRECACHE = `precache-${CACHE_VERSION}`;
 const RUNTIME = `runtime-${CACHE_VERSION}`;
 
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   '/styles.css',
   '/script.js',
   '/pdfs.js',
+  '/tabs.js',
   '/supabase-config.js',
   '/firebase-config.js',
   '/vendor/pdf.min.js',

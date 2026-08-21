@@ -142,8 +142,12 @@ const pdfEls = {
     nextPage: document.getElementById('pdf-next-page'),
     uploadProgress: document.getElementById('upload-progress'),
     uploadProgressLabel: document.getElementById('upload-progress-label'),
-    uploadProgressPct: document.getElementById('upload-progress-pct'),
-    uploadProgressBar: document.getElementById('upload-progress-bar')
+                uploadProgressPct: document.getElementById('upload-progress-pct'),
+    uploadProgressBar: document.getElementById('upload-progress-bar'),
+    tabTabs: document.getElementById('tab-tabs-btn'),
+    tabsContainer: document.getElementById('tabs-container'),
+    importTabsBtn: document.getElementById('import-tabs-btn'),
+    importTabsInput: document.getElementById('import-tabs-input')
 };
 
 function pdfsCol() {
@@ -154,12 +158,16 @@ function pdfsCol() {
 function switchTab(tab) {
     activeTab = tab;
     const isDocs = tab === 'docs';
-    pdfEls.tabNotes.classList.toggle('active', !isDocs);
+    const isTabs = tab === 'tabs';
+    pdfEls.tabNotes.classList.toggle('active', tab === 'notes');
     pdfEls.tabDocs.classList.toggle('active', isDocs);
-    pdfEls.notesContainer.style.display = isDocs ? 'none' : 'block';
+    if (pdfEls.tabTabs) pdfEls.tabTabs.classList.toggle('active', isTabs);
+    pdfEls.notesContainer.style.display = tab === 'notes' ? 'block' : 'none';
     pdfEls.docsContainer.style.display = isDocs ? 'block' : 'none';
-    pdfEls.newNoteBtn.style.display = isDocs ? 'none' : 'inline-flex';
+    if (pdfEls.tabsContainer) pdfEls.tabsContainer.style.display = isTabs ? 'block' : 'none';
+    pdfEls.newNoteBtn.style.display = tab === 'notes' ? 'inline-flex' : 'none';
     pdfEls.addPdfBtn.style.display = isDocs ? 'inline-flex' : 'none';
+    if (pdfEls.importTabsBtn) pdfEls.importTabsBtn.style.display = isTabs ? 'inline-flex' : 'none';
 }
 
 function startPdfsSync() {
