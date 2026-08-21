@@ -1435,21 +1435,45 @@ button {
 .tabs-grid { display: grid; gap: 8px; }
 .tab-card {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    text-decoration: none;
-    color: inherit;
     background: var(--surface-hover);
     transition: background 0.2s ease, transform 0.15s ease;
+    min-width: 0;
+    overflow: hidden;
 }
 .tab-card:hover { background: var(--primary-soft); transform: translateY(-1px); }
+.tab-card-link {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    overflow: hidden;
+}
 .tab-favicon { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; background: var(--neutral-soft); }
-.tab-card-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tab-card-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tab-card-url { font-size: 12px; color: var(--muted-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-card-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.tab-card-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; }
+.tab-card-url { font-size: 12px; color: var(--muted-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; word-break: break-all; }
+.tab-card-delete {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border: none; border-radius: 8px;
+    background: var(--neutral-soft);
+    color: var(--muted-text-color);
+    cursor: pointer;
+    font-size: 14px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+.tab-card-delete:hover { background: var(--danger-soft); color: var(--danger); }
+.tabs-grid { display: grid; gap: 8px; min-width: 0; }
+.tabs-import-group { min-width: 0; overflow: hidden; }
 
 /* ---------- Keyframes ---------- */
 

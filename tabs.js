@@ -74,14 +74,17 @@ function renderTabs() {
   tabImports.forEach(imp => {
     const wrap = document.createElement('div');
     wrap.className = 'tabs-import-group';
-    const tabsHtml = imp.tabs.map(t => `
-      <a class="tab-card" href="${escapeHtml(t.url)}" target="_blank" rel="noopener">
-        <img class="tab-favicon" src="${escapeHtml(t.favicon)}" alt="" onerror="this.style.display='none'" loading="lazy">
-        <span class="tab-card-text">
-          <span class="tab-card-title">${escapeHtml(t.title)}</span>
-          <span class="tab-card-url">${escapeHtml(t.url)}</span>
-        </span>
-      </a>
+    const tabsHtml = imp.tabs.map((t, idx) => `
+      <div class="tab-card">
+        <a class="tab-card-link" href="${escapeHtml(t.url)}" target="_blank" rel="noopener">
+          <img class="tab-favicon" src="${escapeHtml(t.favicon)}" alt="" onerror="this.style.display='none'" loading="lazy">
+          <span class="tab-card-text">
+            <span class="tab-card-title">${escapeHtml(t.title)}</span>
+            <span class="tab-card-url">${escapeHtml(t.url)}</span>
+          </span>
+        </a>
+        <button class="tab-card-delete" data-idx="${idx}" title="Remove this tab">✕</button>
+      </div>
     `).join('');
     wrap.innerHTML = `
       <div class="tabs-import-header">
@@ -102,6 +105,29 @@ function renderTabs() {
       const col = tabsCol(); if (!col) return;
       await col.doc(imp.id).delete().catch(e => showToast('Delete failed: '+e.message,'error'));
       showToast('Import deleted');
+    });
+    wrap.querySelectorAll('.tab-card-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
+        const tab = imp.tabs[idx];
+        if (!tab) return;
+        // remove single tab from array and update doc
+        const newTabs = imp.tabs.slice(0, idx).concat(imp.tabs.slice(idx + 1));
+        const col = tabsCol(); if (!col) return;
+        try {
+          if (newTabs.length === 0) {
+            if (!confirm(`This is the last tab in "${imp.title}". Delete the whole import?`)) return;
+            await col.doc(imp.id).delete();
+            showToast('Import deleted — no tabs left');
+          } else {
+            await col.doc(imp.id).update({ tabs: newTabs });
+            showToast(`Removed — ${newTabs.length} tabs left`);
+          }
+        } catch (err) {
+          showToast('Remove failed: '+(err.message||'error'),'error');
+        }
+      });
     });
     c.appendChild(wrap);
   });
