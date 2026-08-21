@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://firebasestorage.googleapis.com https://*.supabase.co; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com https://*.supabase.co https://*.supabase.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://firebasestorage.googleapis.com https://*.supabase.co; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com https://*.supabase.co https://*.supabase.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'">
     <title>Personal Notes</title>
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f766e">
+        <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
     <div id="login-screen" class="auth-container">
@@ -52,9 +54,10 @@
                     <input type="text" id="search-input" placeholder="🔍 Search notes..." class="search-input">
                 </div>
                 <div class="toolbar-actions">
-                    <div class="tab-bar" role="tablist">
+                                        <div class="tab-bar" role="tablist">
                         <button id="tab-notes-btn" class="tab-btn active" role="tab">📝 Notes</button>
                         <button id="tab-docs-btn" class="tab-btn" role="tab">📄 Docs</button>
+                        <button id="tab-tabs-btn" class="tab-btn" role="tab">🔗 Tabs</button>
                     </div>
                     <select id="category-filter" class="filter-select">
                         <option value="">All Categories</option>
@@ -73,10 +76,14 @@
                     <button id="new-note-btn" class="btn btn-primary">
                         ➕ New Note
                     </button>
-                    <button id="add-pdf-btn" class="btn btn-primary" style="display: none;">
+                                        <button id="add-pdf-btn" class="btn btn-primary" style="display: none;">
                         ➕ PDF
                     </button>
+                    <button id="import-tabs-btn" class="btn btn-primary" style="display: none;">
+                        ⬆️ Import
+                    </button>
                     <input type="file" id="pdf-upload-input" accept="application/pdf,.pdf" hidden>
+                    <input type="file" id="import-tabs-input" accept=".json,.csv,.txt,text/csv,text/plain,application/json" hidden>
                 </div>
             </div>
 
@@ -88,11 +95,19 @@
                 </div>
             </div>
 
-            <div id="docs-container" class="notes-container" style="display: none;">
+                        <div id="docs-container" class="notes-container" style="display: none;">
                 <div class="empty-state">
                     <p class="empty-icon">📄</p>
                     <h2>No documents yet</h2>
                     <p>Upload a PDF to read it here anytime.</p>
+                </div>
+            </div>
+
+            <div id="tabs-container" class="notes-container" style="display: none;">
+                <div class="empty-state">
+                    <p class="empty-icon">🔗</p>
+                    <h2>No tabs imported</h2>
+                    <p>Import a Session Buddy CSV or JSON export to see your saved tabs here.</p>
                 </div>
             </div>
         </main>
@@ -218,8 +233,16 @@
     <script src="firebase-config.js"></script>
     <script src="supabase-config.js"></script>
 
-    <script src="script.js?v=6"></script>
-    <script src="vendor/pdf.min.js?v=6"></script>
-    <script src="pdfs.js?v=6"></script>
+        <script src="script.js?v=8"></script>
+    <script src="vendor/pdf.min.js?v=8"></script>
+    <script src="pdfs.js?v=8"></script>
+    <script src="tabs.js?v=8"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW register failed', e));
+        });
+      }
+    </script>
 </body>
 </html>
